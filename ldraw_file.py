@@ -258,6 +258,8 @@ class LDrawFile:
             if len(parts) > 1:
                 str = parts[1]
                 self.description = str
+            else: # if there's no description, just use the filename
+                self.description = ""
         return False
 
     # name and author are allowed to be case insensitive

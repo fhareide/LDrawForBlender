@@ -60,6 +60,7 @@ class CO_PT_ldraw_panel(bpy.types.Panel):
         col = layout.column()
         col.prop(obj.ldraw_props, 'color_code')
         col.prop(obj.ldraw_props, 'filename')
+        col.prop(obj.ldraw_props, 'export_polygons')
 
 
 class CO_PT_ldraw_eo_panel(bpy.types.Panel):
@@ -81,19 +82,6 @@ class CO_PT_ldraw_eo_panel(bpy.types.Panel):
         col.operator(ldraw_operators.SnapToBrickOperator.bl_idname)
         col.operator(ldraw_operators.SnapToPlateOperator.bl_idname)
         col.operator(ldraw_operators.ResetGridOperator.bl_idname)
-
-        if not do_poll(context):
-            return
-
-        layout.separator(factor=0.3)
-        col = layout.column()
-        col.operator(ldraw_operators.AddBevelOperator.bl_idname)
-        col.operator(ldraw_operators.RemoveBevelOperator.bl_idname)
-        col.operator(ldraw_operators.AddEdgeSplitOperator.bl_idname)
-        col.operator(ldraw_operators.ReimportOperator.bl_idname)
-        col.operator(ldraw_operators.RigMinifigOperator.bl_idname)
-        col.operator(ldraw_operators.RigPartsOperator.bl_idname)
-        col.operator(ldraw_operators.MakeGapsOperator.bl_idname)
 
 
 class CO_PT_ldraw_cu_panel(bpy.types.Panel):
@@ -130,27 +118,36 @@ class CO_PT_ldraw_ex_panel(bpy.types.Panel):
     bl_context = 'objectmode'
     bl_category = 'LDraw'
 
-    @classmethod
-    def poll(cls, context):
-        return do_poll(context)
-
     def draw(self, context):
         obj = context.object
+        scene = bpy.context.scene
 
         layout = self.layout
         # layout.use_property_split = True
         layout.use_property_decorate = False
+        layout.separator(factor=0.3)
+        col = layout.column()
+        
+        col.prop(scene.ldraw_props, 'export_file_path')
+        col.prop(scene.ldraw_props, 'export_precision')
+
+        layout.separator(factor=0.3)
+        col = layout.column()
+        col.operator(ldraw_operators.BatchExportOperator.bl_idname)
+
+        if not do_poll(context):
+          return
 
         col = layout.column()
-        col.prop(obj.ldraw_props, 'export_polygons')
-        col.prop(obj.ldraw_props, 'export_shade_smooth')
-        col.prop(obj.ldraw_props, 'invert_import_scale_matrix')
+        
+        #col.prop(obj.ldraw_props, 'export_shade_smooth')
+        #col.prop(obj.ldraw_props, 'invert_import_scale_matrix')
 
 
 classesToRegister = [
     CO_PT_ldraw_eo_panel,
     CO_PT_ldraw_panel,
-    CO_PT_ldraw_cu_panel,
+    #CO_PT_ldraw_cu_panel,
     CO_PT_ldraw_ex_panel,
 ]
 

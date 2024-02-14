@@ -20,11 +20,11 @@ from . import matrices
 # header file is determined by ldraw_props of active object
 # if obj.ldraw_props.export_polygons current object being iterated will be exported as line type 2,3,4
 # otherwise line type 1
-def do_export(filepath):
+def do_export(obj, filepath):
     FileSystem.build_search_paths(parent_filepath=filepath)
     LDrawFile.read_color_table()
 
-    active_object = bpy.context.object
+    active_object = obj if obj is not None else bpy.context.active_object
     all_objects = bpy.context.scene.objects
     selected_objects = bpy.context.selected_objects
     active_objects = bpy.context.view_layer.objects.active
@@ -41,8 +41,7 @@ def do_export(filepath):
 
     # no filename specified on object
     if name == "" or name is None:
-        print(f"Active object {active_object.name} does not have a name")
-        return False
+      name = obj.name
 
     ldraw_file = LDrawFile("")
     ldraw_file.filename = active_object.ldraw_props.filename
@@ -187,7 +186,7 @@ def __fix_round(number, places=None):
 # TODO: if obj["section_label"] then:
 #  0 // f{obj["section_label"]}
 def __export_subfiles(obj, aa, lines):
-    filename = obj.ldraw_props.filename
+    filename = obj.ldraw_props.filename or bpy.path.clean_name(obj.name,replace="") + ".dat"
     if filename == "" or filename is None:
         print(f"Object {obj.name} does not have a filename")
         return
@@ -200,7 +199,8 @@ def __export_subfiles(obj, aa, lines):
     color = LDrawColor.get_color(color_code)
     color_code = color.code
 
-    precision = obj.ldraw_props.export_precision
+    scene = bpy.context.scene
+    precision = scene.ldraw_props.export_precision
 
     a = __fix_round(aa[0][0], precision)
     b = __fix_round(aa[0][1], precision)
@@ -232,7 +232,8 @@ def __export_polygons(obj, aa, lines):
 
     mesh = __clean_mesh(obj)
 
-    precision = obj.ldraw_props.export_precision
+    scene = bpy.context.scene
+    precision = scene.ldraw_props.export_precision
 
     # export faces
     face_edge_maps = {}

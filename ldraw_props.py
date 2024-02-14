@@ -1,4 +1,5 @@
 import bpy
+import os
 
 from .import_options import ImportOptions
 from .export_options import ExportOptions
@@ -25,7 +26,7 @@ def set_props(obj, ldraw_file, color_code):
     # obj.ldraw_props.keywords = ldraw_file.keywords or ""
     # obj.ldraw_props.history = "; ".join(ldraw_file.history or [])
     obj.ldraw_props.color_code = color_code
-    obj.ldraw_props.export_shade_smooth = ImportOptions.shade_smooth
+    obj.ldraw_props.export_shade_smooth = False #ImportOptions.shade_smooth
 
 
 def get_header_lines(obj, is_model=False):
@@ -270,7 +271,7 @@ class LDrawProps(bpy.types.PropertyGroup):
     export_polygons: bpy.props.BoolProperty(
         name="Export polygons",
         description="If true, export object as polygons. If false, export as line type 1",
-        default=False
+        default=True
     )
 
     export_shade_smooth: bpy.props.BoolProperty(
@@ -284,6 +285,14 @@ class LDrawProps(bpy.types.PropertyGroup):
         description="Round vertex coordinates to this number of places",
         default=ExportOptions.export_precision,
         min=0,
+    )
+
+    export_file_path: bpy.props.StringProperty(
+        name="Export file path",
+        description="Choose a directory to export Part(s). If the directory does not exist, it will be created. Leave blank to save in the same directory as the .blend file.",
+        maxlen=512,
+        default=os.path.join("//", "ExportedParts"),
+        subtype='DIR_PATH'
     )
 
     # color: bpy.props.FloatVectorProperty(

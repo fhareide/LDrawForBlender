@@ -1,11 +1,25 @@
 import bpy
 import os
+import re
 
 from .definitions import APP_ROOT
 from .import_options import ImportOptions
 from . import matrices
 from . import blender_import
+from . import ldraw_export
 
+def ensure_directory_exists(file_path):
+    # Split the file path into directory and file components
+    directory, filename = os.path.split(file_path)
+
+    # Create all the directories in the path
+    os.makedirs(directory, exist_ok=True)
+
+def clean_name_with_backslash(name):
+    # Replace invalid characters with underscores
+    cleaned_name = re.sub(r'[<>:"/|?*]', '_', name)
+
+    return cleaned_name
 
 class VertPrecisionOperator(bpy.types.Operator):
     """Round vertex positions to Vertex precision places"""
@@ -92,6 +106,61 @@ class ReimportOperator(bpy.types.Operator):
 
         return {'FINISHED'}
 
+class BatchExportOperator(bpy.types.Operator):
+    """Batch export selected parts"""
+    bl_idname = "export_ldraw.batch_export"
+    bl_label = "Export selected parts"
+    bl_options = {'UNDO'}
+
+    def execute(self, context):
+        scene = bpy.context.scene
+        # export to blend file location
+        basedir = os.path.dirname(bpy.data.filepath)
+        if not basedir:
+          self.report({'WARNING'},"Please save this .blend file before export.")
+          return {'FINISHED'}
+        
+        if scene.ldraw_props.export_file_path:
+          basedir = scene.ldraw_props.export_file_path
+        
+        view_layer = bpy.context.view_layer
+
+        obj_active = view_layer.objects.active
+        selection = bpy.context.selected_objects
+
+        bpy.ops.object.select_all(action='DESELECT')
+
+        for obj in selection:
+          obj.select_set(True)
+
+          # some exporters only use the active object
+          view_layer.objects.active = obj
+
+          name = obj.ldraw_props.name or clean_name_with_backslash(obj.name)
+
+          # Check if the name doesn't end with ".dat" and add it if missing
+          if not name.endswith(".dat"):
+              name += ".dat"
+
+          fn = os.path.join(basedir, name)
+          abs_path = bpy.path.abspath(fn)
+
+
+          print("exporting:", abs_path)
+
+          # Ensure that the directory exists before exporting
+          ensure_directory_exists(abs_path)
+
+          ldraw_export.do_export(obj, abs_path)
+
+          # Can be used for multiple formats
+          # bpy.ops.export_scene.x3d(filepath=fn + ".x3d", use_selection=True)
+
+          obj.select_set(False)
+
+          print("written:", abs_path)            
+
+        return {'FINISHED'}
 
 class RemoveBevelOperator(bpy.types.Operator):
     """Remove bevel modifier from selected objects"""
@@ -188,6 +257,7 @@ classesToRegister = [
     SnapToBrickOperator,
     SnapToPlateOperator,
     ReimportOperator,
+    BatchExportOperator,
     RemoveBevelOperator,
     AddBevelOperator,
     AddEdgeSplitOperator

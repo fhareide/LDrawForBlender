@@ -11,18 +11,18 @@ from . import matrices
 
 
 def create_mesh(key, geometry_data, color_code, return_mesh=False):
-    mesh = bpy.data.meshes.get(key)
-    if mesh is None or return_mesh:
-        if mesh is None:
-            mesh = bpy.data.meshes.new(key)
-        mesh.name = key
-        mesh[strings.ldraw_filename_key] = geometry_data.file.name
+    #mesh = bpy.data.meshes.get(key)
+    #if mesh is None or return_mesh:
+        #if mesh is None:
+    mesh = bpy.data.meshes.new(key)
+    mesh.name = geometry_data.file.name
+    mesh[strings.ldraw_filename_key] = geometry_data.file.name
 
-        __process_bmesh(mesh, geometry_data, color_code)
-        __process_mesh_sharp_edges(mesh, geometry_data)
-        __process_mesh(mesh)
+    __process_bmesh(mesh, geometry_data, color_code)
+    __process_mesh_sharp_edges(mesh, geometry_data)
+    __process_mesh(mesh)
 
-        mesh.transform(matrices.rotation_matrix)
+    mesh.transform(matrices.rotation_matrix)
 
     return mesh
 

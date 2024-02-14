@@ -120,7 +120,7 @@ class EXPORT_OT_do_ldraw_export(bpy.types.Operator, ExportHelper):
         ExportOptions.triangulate = self.triangulate
         ExportOptions.ngon_handling = self.ngon_handling
 
-        ldraw_export.do_export(bpy.path.abspath(self.filepath))
+        ldraw_export.do_export(None, bpy.path.abspath(self.filepath))
 
         print("")
         print("======Export Complete======")
