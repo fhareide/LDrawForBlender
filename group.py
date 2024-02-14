@@ -54,31 +54,7 @@ def groups_setup(top_collection_name):
 
     collection_name = top_collection_name
     host_collection = get_scene_collection()
-    collection = get_filename_collection(collection_name, host_collection)
-    top_collection = collection
-
-    collection_name = f"{top_collection.name} Files"
-    host_collection = top_collection
-    collection = get_collection(collection_name, host_collection)
-    files_collection = collection
-
-    collection_name = f"{top_collection.name} Parts"
-    host_collection = top_collection
-    collection = get_collection(collection_name, host_collection)
-    parts_collection = collection
-    helpers.hide_obj(parts_collection)
-
-    if ImportOptions.meta_group:
-        collection_name = f"{top_collection.name} Groups"
-        host_collection = top_collection
-        collection = get_collection(collection_name, host_collection)
-        groups_collection = collection
-        helpers.hide_obj(groups_collection)
-
-        collection_name = f"{top_collection.name} Ungrouped"
-        host_collection = groups_collection
-        collection = get_collection(collection_name, host_collection)
-        ungrouped_collection = collection
+    top_collection = host_collection
 
 
 def get_scene_collection():

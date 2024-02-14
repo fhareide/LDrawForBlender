@@ -267,12 +267,6 @@ class LDrawProps(bpy.types.PropertyGroup):
         default=False
     )
 
-    invert_gap_scale_matrix: bpy.props.BoolProperty(
-        name="Invert gap scale matrix",
-        description="If true, gap scale matrix will be inverted on export",
-        default=False
-    )
-
     export_polygons: bpy.props.BoolProperty(
         name="Export polygons",
         description="If true, export object as polygons. If false, export as line type 1",

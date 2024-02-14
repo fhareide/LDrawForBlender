@@ -7,9 +7,6 @@ class ExportOptions:
     defaults["merge_distance"] = 0.05
     merge_distance = defaults["merge_distance"]
 
-    defaults["recalculate_normals"] = False
-    recalculate_normals = defaults["recalculate_normals"]
-
     defaults["triangulate"] = False
     triangulate = defaults["triangulate"]
 
@@ -19,5 +16,5 @@ class ExportOptions:
     defaults["selection_only"] = True
     selection_only = defaults["selection_only"]
 
-    defaults["export_precision"] = 2
+    defaults["export_precision"] = 3
     export_precision = defaults["export_precision"]

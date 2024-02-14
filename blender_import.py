@@ -8,7 +8,6 @@ from .ldraw_file import LDrawFile
 from .ldraw_node import LDrawNode
 from .filesystem import FileSystem
 from .ldraw_color import LDrawColor
-from . import blender_camera
 from . import helpers
 from . import strings
 from . import group
@@ -22,8 +21,6 @@ def do_import(filepath, color_code="16", return_mesh=False):
 
     ImportSettings.save_settings()
     ImportSettings.apply_settings()
-
-    __scene_setup()
 
     FileSystem.build_search_paths(parent_filepath=filepath)
     LDrawFile.read_color_table()
@@ -42,34 +39,12 @@ def do_import(filepath, color_code="16", return_mesh=False):
     root_node.file = ldraw_file
 
     group.groups_setup(filepath)
-    ldraw_meta.meta_step()
 
     # return root_node.load()
     obj = root_node.load(color_code=color_code, return_mesh=return_mesh)
 
     # s = {str(k): v for k, v in sorted(LDrawNode.geometry_datas2.items(), key=lambda ele: ele[1], reverse=True)}
     # helpers.write_json("gs2.json", s, indent=4)
-
-    if ImportOptions.meta_step:
-        if ImportOptions.set_end_frame:
-            bpy.context.scene.frame_end = ldraw_meta.current_frame + ImportOptions.frames_per_step
-            bpy.context.scene.frame_set(bpy.context.scene.frame_end)
-
-    max_clip_end = 0
-    for camera in ldraw_meta.cameras:
-        camera = blender_camera.create_camera(camera, empty=ldraw_object.top_empty, collection=group.top_collection)
-        if bpy.context.scene.camera is None:
-            if camera.data.clip_end > max_clip_end:
-                max_clip_end = camera.data.clip_end
-            bpy.context.scene.camera = camera
-
-    for area in bpy.context.screen.areas:
-        if area.type == "VIEW_3D":
-            for space in area.spaces:
-                # space.shading.show_backface_culling = False
-                if space.type == "VIEW_3D":
-                    if space.clip_end < max_clip_end:
-                        space.clip_end = max_clip_end
 
     BlenderMaterials.reset_caches()
     FileSystem.reset_caches()
@@ -83,48 +58,8 @@ def do_import(filepath, color_code="16", return_mesh=False):
 
     return obj
 
-
-def __scene_setup():
-    bpy.context.scene.eevee.use_ssr = True
-    bpy.context.scene.eevee.use_ssr_refraction = True
-    bpy.context.scene.eevee.use_taa_reprojection = True
-
-    # https://blender.stackexchange.com/a/146838
-    # TODO: use line art modifier with grease pencil object
-    #  parts can't be in more than one group if those group's parent is targeted by the modifier
-    #  groups and ungroup collections can't be under model.ldr collection or else the lines don't render
-    #  studs, and maybe other intersecting geometry, may have broken lines
-    #  checking "overlapping edges as contour" helps, applying edge split, scale, marking freestyle edge does not seem to make a difference
-    if ImportOptions.use_freestyle_edges:
-        bpy.context.scene.render.use_freestyle = True
-        linesets = bpy.context.view_layer.freestyle_settings.linesets
-        if len(linesets) < 1:
-            linesets.new("LDraw LineSet")
-        lineset = linesets[0]
-        # lineset.linestyle.color = color.edge_color
-        lineset.select_by_visibility = True
-        lineset.select_by_edge_types = True
-        lineset.select_by_face_marks = False
-        lineset.select_by_collection = False
-        lineset.select_by_image_border = False
-        lineset.visibility = 'VISIBLE'
-        lineset.edge_type_negation = 'INCLUSIVE'
-        lineset.edge_type_combination = 'OR'
-        lineset.select_silhouette = False
-        lineset.select_border = False
-        lineset.select_contour = False
-        lineset.select_suggestive_contour = False
-        lineset.select_ridge_valley = False
-        lineset.select_crease = False
-        lineset.select_edge_mark = True
-        lineset.select_external_contour = False
-        lineset.select_material_boundary = False
-
-
 def __load_materials(file):
-    ImportOptions.meta_group = False
     ImportOptions.parent_to_empty = False
-    ImportOptions.make_gaps = False
 
     # slope texture demonstration
     obj = do_import('3044.dat')
@@ -161,10 +96,7 @@ def __load_materials(file):
             continue
 
     j = 0
-    for collection_name, codes in colors.items():
-        scene_collection = group.get_scene_collection()
-        collection = group.get_collection(collection_name, scene_collection)
-
+    for codes in colors.items():
         for i, color_code in enumerate(codes):
             bm = bmesh.new()
 
@@ -206,5 +138,4 @@ def __load_materials(file):
             color = LDrawColor.get_color(color_code)
             obj.color = color.linear_color_a
 
-            group.link_obj(collection, obj)
         j += 1

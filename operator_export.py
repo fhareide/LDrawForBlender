@@ -11,10 +11,10 @@ from . import ldraw_export
 
 
 class EXPORT_OT_do_ldraw_export(bpy.types.Operator, ExportHelper):
-    """Export an LDraw model File"""
+    """Export an LDraw part"""
 
     bl_idname = "ldraw_exporter.export_operator"
-    bl_label = "Export LDraw"
+    bl_label = "Export LDraw parts"
     bl_options = {'PRESET'}
 
     # TODO: set export filename to current obj ldraw part_name
@@ -60,12 +60,6 @@ class EXPORT_OT_do_ldraw_export(bpy.types.Operator, ExportHelper):
         name="Selection only",
         description="Export selected objects only",
         default=ExportOptions.selection_only,
-    )
-
-    recalculate_normals: bpy.props.BoolProperty(
-        name="Recalculate normals",
-        description="Recalculate normals",
-        default=ExportOptions.recalculate_normals,
     )
 
     triangulate: bpy.props.BoolProperty(
@@ -123,7 +117,6 @@ class EXPORT_OT_do_ldraw_export(bpy.types.Operator, ExportHelper):
         ExportOptions.selection_only = self.selection_only
         ExportOptions.remove_doubles = self.remove_doubles
         ExportOptions.merge_distance = self.merge_distance
-        ExportOptions.recalculate_normals = self.recalculate_normals
         ExportOptions.triangulate = self.triangulate
         ExportOptions.ngon_handling = self.ngon_handling
 
@@ -164,13 +157,12 @@ class EXPORT_OT_do_ldraw_export(bpy.types.Operator, ExportHelper):
         col.label(text="Cleanup Options")
         col.prop(self, "remove_doubles")
         col.prop(self, "merge_distance")
-        col.prop(self, "recalculate_normals")
         col.prop(self, "triangulate")
         col.prop(self, "ngon_handling")
 
 
 def build_export_menu(self, context):
-    self.layout.operator(EXPORT_OT_do_ldraw_export.bl_idname, text="LDraw (.mpd/.ldr/.l3b/.dat)")
+    self.layout.operator(EXPORT_OT_do_ldraw_export.bl_idname, text="LDraw part (.dat)")
 
 
 classesToRegister = [

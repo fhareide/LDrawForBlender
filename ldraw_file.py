@@ -11,6 +11,7 @@ from . import base64_handler
 from . import helpers
 from . import ldraw_part_types
 from . import texmap
+from . import matrices
 
 
 class LDrawFile:
@@ -93,13 +94,7 @@ class LDrawFile:
 
     @classmethod
     def get_file(cls, filename):
-        ldraw_file = cls.__parsed_file_cache.get(filename)
-        if ldraw_file is not None:
-            return ldraw_file
-
-        ldraw_file = cls.__unparsed_file_cache.get(filename)
-        if ldraw_file is None:
-            ldraw_file = cls.__read_file(filename)
+        ldraw_file = cls.__read_file(filename)
 
         if ldraw_file is None:
             return ldraw_file
@@ -248,8 +243,6 @@ class LDrawFile:
                 if self.__line_save(clean_line): continue
                 if self.__line_clear(clean_line): continue
                 if self.__line_print(clean_line): continue
-                if self.__line_ldcad(clean_line): continue
-                if self.__line_leocad(clean_line): continue
                 if self.__line_texmap(clean_line): continue
                 if self.__line_stud_io(clean_line): continue
             except Exception as e:
@@ -440,77 +433,6 @@ class LDrawFile:
             ldraw_node.line = clean_line
             ldraw_node.meta_command = "print"
             ldraw_node.meta_args["message"] = clean_line.split(maxsplit=2)[2]
-            self.child_nodes.append(ldraw_node)
-            return True
-        return False
-
-    # http://www.melkert.net/LDCad/tech/meta
-    def __line_ldcad(self, clean_line):
-        if clean_line.startswith("0 !LDCAD GROUP_DEF "):
-            ldraw_node = LDrawNode()
-            ldraw_node.line = clean_line
-            ldraw_node.meta_command = "group_def"
-
-            # 0 !LDCAD GROUP_DEF [topLevel=true] [LID=119507361] [GID=FsMGcO9CYmY] [name=Group 12] [center=0 0 0]
-            _params = re.search(r"\S+\s+\S+\s+\S+\s+(\[.*\])\s+(\[.*\])\s+(\[.*\])\s+(\[.*\])\s+(\[.*\])", clean_line)
-            if not _params:
-                return
-
-            lid_str = _params[2]  # "[LID=119507361]"
-            lid_args = re.search(r"\[(.*)=(.*)\]", lid_str)
-            ldraw_node.meta_args["id"] = lid_args[2]  # "119507361"
-
-            name_str = _params[4]  # "[name=Group 12]"
-            name_args = re.search(r"\[(.*)=(.*)\]", name_str)
-            ldraw_node.meta_args["name"] = name_args[2]  # "Group 12"
-
-            center_str = _params[5]  # "[center=0 0 0]"
-            name_args = re.search(r"\[(.*)=(.*)\]", center_str)
-            center_str_val = name_args[2]  # "0 0 0"
-            (x, y, z) = map(float, center_str_val.split())
-            ldraw_node.meta_args["center"] = mathutils.Vector((x, y, z))
-
-            self.child_nodes.append(ldraw_node)
-            return True
-
-        if clean_line.startswith("0 !LDCAD GROUP_NXT "):
-            ldraw_node = LDrawNode()
-            ldraw_node.line = clean_line
-            ldraw_node.meta_command = "group_nxt"
-
-            # 0 !LDCAD GROUP_NXT [ids=13016969] [nrs=-1]
-            _params = re.search(r"\S+\s+\S+\s+\S+\s+(\[.*\])\s+(\[.*\])", clean_line)
-
-            ids_str = _params[1]  # "[ids=13016969]"
-            ids_args = re.search(r"\[(.*)=(.*)\]", ids_str)
-            ldraw_node.meta_args["id"] = ids_args[2]  # "13016969"
-
-            self.child_nodes.append(ldraw_node)
-            return True
-        return False
-
-    # https://www.leocad.org/docs/meta.html
-    def __line_leocad(self, clean_line):
-        if clean_line.startswith("0 !LEOCAD GROUP BEGIN "):
-            name_args = clean_line.split(maxsplit=4)
-            ldraw_node = LDrawNode()
-            ldraw_node.line = clean_line
-            ldraw_node.meta_command = "group_begin"
-            ldraw_node.meta_args["name"] = name_args[4]
-            self.child_nodes.append(ldraw_node)
-            return True
-
-        if clean_line.startswith("0 !LEOCAD GROUP END"):
-            ldraw_node = LDrawNode()
-            ldraw_node.line = clean_line
-            ldraw_node.meta_command = "group_end"
-            self.child_nodes.append(ldraw_node)
-            return True
-
-        if clean_line.startswith("0 !LEOCAD CAMERA "):
-            ldraw_node = LDrawNode()
-            ldraw_node.line = clean_line
-            ldraw_node.meta_command = "leocad_camera"
             self.child_nodes.append(ldraw_node)
             return True
         return False

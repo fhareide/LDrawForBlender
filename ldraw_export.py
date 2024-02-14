@@ -133,17 +133,11 @@ def get_matrix(obj):
     object_invert_import_scale_matrix = obj.ldraw_props.invert_import_scale_matrix
     invert_import_scale_matrix = parent_invert_import_scale_matrix or object_invert_import_scale_matrix
 
-    invert_gap_scale_matrix = obj.ldraw_props.invert_gap_scale_matrix
-
     matrix_world = matrices.identity_matrix
     matrix_world = obj.matrix_world
 
-    if invert_import_scale_matrix and invert_gap_scale_matrix:
-        aa = matrices.import_scale_matrix.inverted() @ matrix_world @ matrices.gap_scale_matrix.inverted()
-    elif invert_import_scale_matrix:
+    if invert_import_scale_matrix:
         aa = matrices.import_scale_matrix.inverted() @ matrix_world
-    elif invert_gap_scale_matrix:
-        aa = matrix_world @ matrices.gap_scale_matrix.inverted()
     else:
         aa = matrix_world
 
@@ -169,9 +163,6 @@ def __clean_mesh(obj):
 
     if ExportOptions.remove_doubles:
         bmesh.ops.remove_doubles(bm, verts=bm.verts[:], dist=ExportOptions.merge_distance)
-
-    if ExportOptions.recalculate_normals:
-        bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
 
     mesh = obj.data.copy()
     helpers.finish_bmesh(bm, mesh)

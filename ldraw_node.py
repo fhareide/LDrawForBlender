@@ -1,4 +1,5 @@
 import uuid
+import bpy
 
 from .geometry_data import GeometryData
 from .import_options import ImportOptions
@@ -62,8 +63,6 @@ class LDrawNode:
              ):
 
         if self.file.is_edge_logo() and not ImportOptions.display_logo:
-            return
-        if self.file.is_stud() and ImportOptions.no_studs:
             return
 
         LDrawNode.current_filename = self.file.name
@@ -136,14 +135,11 @@ class LDrawNode:
             accum_invert = False
             self.bfc_certified = None
 
-        collection = parent_collection
-        if collection is None:
+        collection = None
+        if top_part or top_model:
             collection = group.top_collection
-            if top_model:
-                collection = group.files_collection
-
-        if top_model:
-            collection = group.get_filename_collection(self.file.name, collection)
+            if parent_collection is not None:
+                collection = parent_collection
 
         # always process geometry_data if this is a subpart or there is no geometry_data
         # if geometry_data exists, this is a top level part that has already been processed so don't process this key again
@@ -197,7 +193,6 @@ class LDrawNode:
                         #     yield node
 
                         subfile_line_index += 1
-                        ldraw_meta.meta_root_group_nxt(self, child_node)
                     elif child_node.meta_command == "2":
                         ldraw_meta.meta_edge(
                             child_node,
@@ -233,23 +228,6 @@ class LDrawNode:
                     ldraw_meta.meta_texmap(self, child_node, child_matrix)
                 elif child_node.meta_command.startswith("pe_tex_"):
                     ldraw_meta.meta_pe_tex(self, child_node, child_matrix)
-                else:
-                    # these meta commands really only make sense if they are encountered at the model level
-                    # these should never be encoutered when geometry_data not None
-                    # so they should be processed every time they are hit
-                    # as opposed to just once because they won't be cached
-                    if child_node.meta_command == "step":
-                        ldraw_meta.meta_step()
-                    elif child_node.meta_command == "save":
-                        ldraw_meta.meta_save()
-                    elif child_node.meta_command == "clear":
-                        ldraw_meta.meta_clear()
-                    elif child_node.meta_command == "print":
-                        ldraw_meta.meta_print(child_node)
-                    elif child_node.meta_command.startswith("group"):
-                        ldraw_meta.meta_group(child_node)
-                    elif child_node.meta_command == "leocad_camera":
-                        ldraw_meta.meta_leocad_camera(child_node, child_matrix)
 
                 if self.texmap_next:
                     ldraw_meta.set_texmap_end(self)
@@ -290,9 +268,6 @@ class LDrawNode:
                 edge_key = f"e_{geometry_data.key}"
                 edge_mesh = ldraw_mesh.create_edge_mesh(edge_key, geometry_data)
                 edge_obj = ldraw_object.create_edge_obj(edge_mesh, geometry_data, color_code, obj, collection)
-
-            if group.end_next_collection:
-                group.next_collection = None
 
             # if LDrawNode.part_count == 1:
             #     raise BaseException("done")

@@ -11,10 +11,10 @@ from . import blender_import
 
 
 class IMPORT_OT_do_ldraw_import(bpy.types.Operator):
-    """Import an LDraw model File"""
+    """Import an LDraw Part"""
 
     bl_idname = "ldraw_exporter.import_operator"
-    bl_label = "Import LDraw"
+    bl_label = "Import LDraw part"
     bl_options = {'PRESET', 'UNDO'}
     filename_ext = ""
 
@@ -115,12 +115,6 @@ class IMPORT_OT_do_ldraw_import(bpy.types.Operator):
         items=ImportOptions.smooth_type_choices,
     )
 
-    no_studs: bpy.props.BoolProperty(
-        name="No studs",
-        description="Don't import studs",
-        **ImportSettings.settings_dict('no_studs'),
-    )
-
     parent_to_empty: bpy.props.BoolProperty(
         name="Parent to empty",
         description="Parent the model to an empty",
@@ -143,21 +137,6 @@ class IMPORT_OT_do_ldraw_import(bpy.types.Operator):
         max=1.00,
     )
 
-    make_gaps: bpy.props.BoolProperty(
-        name="Make gaps",
-        description="Puts small gaps between parts",
-        **ImportSettings.settings_dict('make_gaps'),
-    )
-
-    gap_scale: bpy.props.FloatProperty(
-        name="Gap scale",
-        description="Scale parts by this value to make gaps",
-        **ImportSettings.settings_dict('gap_scale'),
-        precision=3,
-        min=0.0,
-        max=1.0,
-    )
-
     meta_bfc: bpy.props.BoolProperty(
         name="BFC",
         description="Process BFC meta commands",
@@ -168,75 +147,6 @@ class IMPORT_OT_do_ldraw_import(bpy.types.Operator):
         name="TEXMAP",
         description="Process TEXMAP and DATA meta commands",
         **ImportSettings.settings_dict('meta_texmap'),
-    )
-
-    meta_print_write: bpy.props.BoolProperty(
-        name="PRINT/WRITE",
-        description="Process PRINT/WRITE meta command",
-        **ImportSettings.settings_dict('meta_print_write'),
-    )
-
-    meta_group: bpy.props.BoolProperty(
-        name="GROUP",
-        description="Process GROUP meta commands",
-        **ImportSettings.settings_dict('meta_group'),
-    )
-
-    meta_step: bpy.props.BoolProperty(
-        name="STEP",
-        description="Process STEP meta command",
-        **ImportSettings.settings_dict('meta_step'),
-    )
-
-    meta_step_groups: bpy.props.BoolProperty(
-        name="STEP Groups",
-        description="Create collections for individual steps",
-        **ImportSettings.settings_dict('meta_step_groups'),
-    )
-
-    meta_clear: bpy.props.BoolProperty(
-        name="CLEAR",
-        description="Process CLEAR meta command",
-        **ImportSettings.settings_dict('meta_clear'),
-    )
-
-    meta_pause: bpy.props.BoolProperty(
-        name="PAUSE",
-        description="Process PAUSE meta command",
-        **ImportSettings.settings_dict('meta_pause'),
-    )
-
-    meta_save: bpy.props.BoolProperty(
-        name="SAVE",
-        description="Process SAVE meta command",
-        **ImportSettings.settings_dict('meta_save'),
-    )
-
-    set_end_frame: bpy.props.BoolProperty(
-        name="Set step end frame",
-        description="Set the end frame to the last step",
-        **ImportSettings.settings_dict('set_end_frame'),
-    )
-
-    frames_per_step: bpy.props.IntProperty(
-        name="Frames per step",
-        description="Frames per step",
-        **ImportSettings.settings_dict('frames_per_step'),
-        min=1,
-    )
-
-    starting_step_frame: bpy.props.IntProperty(
-        name="Starting step frame",
-        options={'HIDDEN'},
-        description="Frame to add the first STEP meta command",
-        **ImportSettings.settings_dict('starting_step_frame'),
-        min=1,
-    )
-
-    set_timeline_markers: bpy.props.BoolProperty(
-        name="Set timeline markers",
-        description="Set timeline markers for meta commands",
-        **ImportSettings.settings_dict('set_timeline_markers'),
     )
 
     import_edges: bpy.props.BoolProperty(
@@ -258,54 +168,16 @@ class IMPORT_OT_do_ldraw_import(bpy.types.Operator):
         **ImportSettings.settings_dict('treat_shortcut_as_model'),
     )
 
-    recalculate_normals: bpy.props.BoolProperty(
-        name="Recalculate normals",
-        description="Recalculate normals. Not recommended if BFC processing is active",
-        **ImportSettings.settings_dict('recalculate_normals'),
-    )
-
-    triangulate: bpy.props.BoolProperty(
-        name="Triangulate faces",
-        description="Triangulate all faces",
-        **ImportSettings.settings_dict('triangulate'),
+    preserve_hierarchy: bpy.props.BoolProperty(
+        name="Preserve hierarchy",
+        description="Preserve the hierarchy of the LDraw file in the imported model",
+        **ImportSettings.settings_dict('preserve_hierarchy'),
     )
 
     profile: bpy.props.BoolProperty(
         name="Profile",
         description="Profile import performance",
         default=False
-    )
-
-    bevel_edges: bpy.props.BoolProperty(
-        name="Bevel edges",
-        description="Bevel edges. Can cause some parts to render incorrectly",
-        **ImportSettings.settings_dict('bevel_edges'),
-    )
-
-    bevel_weight: bpy.props.FloatProperty(
-        name="Bevel weight",
-        description="Bevel weight",
-        **ImportSettings.settings_dict('bevel_weight'),
-        precision=1,
-        step=10,
-        min=0.0,
-        max=1.0,
-    )
-
-    bevel_width: bpy.props.FloatProperty(
-        name="Bevel width",
-        description="Bevel width",
-        **ImportSettings.settings_dict('bevel_width'),
-        precision=1,
-        step=10,
-        min=0.0,
-        max=1.0,
-    )
-
-    bevel_segments: bpy.props.IntProperty(
-        name="Bevel segments",
-        description="Bevel segments",
-        **ImportSettings.settings_dict('bevel_segments'),
     )
 
     def invoke(self, context, _event):
@@ -406,32 +278,12 @@ class IMPORT_OT_do_ldraw_import(bpy.types.Operator):
         col.label(text="Scaling Options")
         col.prop(self, "scale_strategy")
         col.prop(self, "import_scale")
-        col.prop(self, "make_gaps")
-        col.prop(self, "gap_scale")
-
-        layout.separator(factor=space_factor)
-        col = layout.column()
-        col.label(text="Bevel Options")
-        col.prop(self, "bevel_edges")
-        col.prop(self, "bevel_weight")
-        col.prop(self, "bevel_width")
-        col.prop(self, "bevel_segments")
 
         layout.separator(factor=space_factor)
         col = layout.column()
         col.label(text="Meta Commands")
         col.prop(self, "meta_bfc")
         col.prop(self, "meta_texmap")
-        col.prop(self, "meta_group")
-        col.prop(self, "meta_print_write")
-        col.prop(self, "meta_step")
-        col.prop(self, "meta_step_groups")
-        col.prop(self, "frames_per_step")
-        col.prop(self, "set_end_frame")
-        col.prop(self, "meta_clear")
-        # col.prop(self, "meta_pause")
-        col.prop(self, "meta_save")
-        col.prop(self, "set_timeline_markers")
 
         layout.separator(factor=space_factor)
         col = layout.column()
@@ -440,19 +292,17 @@ class IMPORT_OT_do_ldraw_import(bpy.types.Operator):
         col.prop(self, "merge_distance")
         col.prop(self, "shade_smooth")
         col.prop(self, "smooth_type")
-        col.prop(self, "recalculate_normals")
-        col.prop(self, "triangulate")
 
         layout.separator(factor=space_factor)
         col = layout.column()
         col.label(text="Extras")
         col.prop(self, "import_edges")
         col.prop(self, "treat_shortcut_as_model")
-        col.prop(self, "no_studs")
+        col.prop(self, "preserve_hierarchy")
 
 
 def build_import_menu(self, context):
-    self.layout.operator(IMPORT_OT_do_ldraw_import.bl_idname, text="LDraw (.mpd/.ldr/.l3b/.dat)")
+    self.layout.operator(IMPORT_OT_do_ldraw_import.bl_idname, text="LDraw part (.dat)")
 
 
 classesToRegister = [
