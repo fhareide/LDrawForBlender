@@ -254,24 +254,11 @@ class IMPORT_OT_do_ldraw_import(bpy.types.Operator):
 
         col = layout.column()
         col.prop(self, "ldraw_path")
-        col.prop(self, "studio_ldraw_path")
+        
 
         layout.separator(factor=space_factor)
         col = layout.column()
         col.prop(self, "profile")
-
-        layout.separator(factor=space_factor)
-        col = layout.column()
-        col.label(text="Import Options")
-        col.prop(self, "prefer_studio")
-        col.prop(self, "prefer_unofficial")
-        col.prop(self, "case_sensitive_filesystem")
-        col.prop(self, "use_alt_colors")
-        col.prop(self, "resolution")
-        col.prop(self, "display_logo")
-        col.prop(self, "chosen_logo")
-        col.prop(self, "use_freestyle_edges")
-        col.prop(self, "parent_to_empty")
 
         layout.separator(factor=space_factor)
         col = layout.column()
@@ -295,10 +282,8 @@ class IMPORT_OT_do_ldraw_import(bpy.types.Operator):
 
         layout.separator(factor=space_factor)
         col = layout.column()
-        col.label(text="Extras")
-        col.prop(self, "import_edges")
-        col.prop(self, "treat_shortcut_as_model")
         col.prop(self, "preserve_hierarchy")
+        
 
 
 def build_import_menu(self, context):
