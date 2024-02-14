@@ -21,7 +21,7 @@ def reset_caches():
 
 
 # TODO: to add rigid body - must apply scale and cannot be parented to empty
-def create_object(mesh, geometry_data, color_code, matrix, collection):
+def create_object(mesh, geometry_data, color_code, matrix, collection, is_root, root_obj):
     obj = bpy.data.objects.new(mesh.name, mesh)
     obj[strings.ldraw_filename_key] = geometry_data.file.name
     obj[strings.ldraw_color_code_key] = color_code
@@ -30,9 +30,9 @@ def create_object(mesh, geometry_data, color_code, matrix, collection):
     obj.color = color.linear_color_a
 
     ldraw_props.set_props(obj, geometry_data.file, color_code)
-    __process_top_object_matrix(obj, matrix)
-    __process_top_object_edges(obj)
 
+    __process_top_object_matrix(obj, matrix, is_root)
+    __process_top_object_edges(obj)
     __link_obj_to_collection(obj, collection)
 
     return obj
@@ -84,14 +84,15 @@ def apply_transform(ob, use_location=False, use_rotation=False, use_scale=False)
 
     ob.matrix_basis = basis[0] @ basis[1] @ basis[2]
 
-def __process_top_object_matrix(obj, obj_matrix):
+def __process_top_object_matrix(obj, obj_matrix, is_root):
     global top_empty
 
     import_scale_matrix = matrices.rotation_matrix @ matrices.import_scale_matrix
 
     matrix_world = import_scale_matrix @ obj_matrix
     obj.matrix_world = matrix_world
-    apply_transform(obj, use_rotation=True, use_scale=True)
+    if is_root:
+      apply_transform(obj, use_rotation=True, use_scale=True)
 
 
     if ImportOptions.scale_strategy_value() == "mesh":

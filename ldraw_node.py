@@ -30,6 +30,7 @@ class LDrawNode:
 
     def __init__(self):
         self.is_root = False
+        self.root_object = None
         self.file = None
         self.line = ""
         self.color_code = "16"
@@ -105,12 +106,7 @@ class LDrawNode:
         # TODO: is_shortcut_model splits 99141c01.dat and u9158.dat into its subparts -
         #  u9158.dat - ensure the battery contacts are correct
 
-        top_part = geometry_data is None and self.file.is_like_part()
-        top_model = geometry_data is None and self.file.is_like_model()
-
-        merge_model = self.file.name == "10261 - candyflosscart.ldr"
-        merge_model = False
-        merge_model = top_model and merge_model
+        top_part = ImportOptions.preserve_hierarchy or geometry_data is None and self.file.is_like_part()
 
         part_model = self.file.is_like_stud()
         part_model = False
@@ -122,13 +118,8 @@ class LDrawNode:
 
             geometry_data = LDrawNode.geometry_datas.get(geometry_data_key)
             child_matrix = matrices.identity_matrix
-        elif top_model:
-            if merge_model:
-                geometry_data = LDrawNode.geometry_datas.get(geometry_data_key)
-                child_matrix = matrices.identity_matrix
-            LDrawNode.current_model_filename = self.file.name
 
-        if top_model or top_part:
+        if top_part:
             # creature_015_mangreengraysuitmustache.ldr is a BFC NOCERTIFY model which causes parts used by it to be NOCERTIFY everywhere
             # reset bfc for parts since they are what define the bfc state of their geometry
             accum_cull = True
@@ -136,15 +127,15 @@ class LDrawNode:
             self.bfc_certified = None
 
         collection = None
-        if top_part or top_model:
+        if top_part:
             collection = group.top_collection
             if parent_collection is not None:
                 collection = parent_collection
 
         # always process geometry_data if this is a subpart or there is no geometry_data
         # if geometry_data exists, this is a top level part that has already been processed so don't process this key again
-        is_top = top_part or merge_model or part_model
-        if not is_top or geometry_data is None:
+        is_top = top_part or part_model
+        if geometry_data is None or ImportOptions.preserve_hierarchy:
             if is_top:
                 geometry_data = GeometryData()
 
@@ -262,7 +253,9 @@ class LDrawNode:
             mesh = ldraw_mesh.create_mesh(key, geometry_data, color_code, return_mesh=return_mesh)
             if return_mesh:
                 return mesh
-            obj = ldraw_object.create_object(mesh, geometry_data, color_code, obj_matrix, collection)
+            obj = ldraw_object.create_object(mesh, geometry_data, color_code, obj_matrix, collection, self.is_root, self.root_object)
+            if self.is_root:
+              self.root_object = obj
 
             if ImportOptions.import_edges:
                 edge_key = f"e_{geometry_data.key}"
