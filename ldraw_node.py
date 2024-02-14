@@ -76,6 +76,10 @@ class LDrawNode:
         parent_matrix = parent_matrix or matrices.identity_matrix
         accum_matrix = accum_matrix or matrices.identity_matrix
 
+        if self.is_root or self.file.is_subpart():
+          self.matrix = self.matrix @ matrices.rotation_matrix
+
+
         current_matrix = parent_matrix @ self.matrix
         child_accum_matrix = accum_matrix @ current_matrix
         child_matrix = current_matrix
@@ -106,7 +110,7 @@ class LDrawNode:
         # TODO: is_shortcut_model splits 99141c01.dat and u9158.dat into its subparts -
         #  u9158.dat - ensure the battery contacts are correct
 
-        top_part = ImportOptions.preserve_hierarchy or geometry_data is None and self.file.is_like_part()
+        top_part = geometry_data is None and self.file.is_like_part() or self.file.is_subpart()
 
         part_model = self.file.is_like_stud()
         part_model = False
@@ -115,8 +119,13 @@ class LDrawNode:
         if top_part:
             # top-level part
             LDrawNode.part_count += 1
-
             geometry_data = LDrawNode.geometry_datas.get(geometry_data_key)
+            current_matrix = current_matrix @ matrices.reverse_rotation_matrix
+            # clean up floating point errors
+            for i in range(len(current_matrix)):
+                for j in range(len(current_matrix[i])):
+                    current_matrix[i][j] = round(current_matrix[i][j], 6)
+
             child_matrix = matrices.identity_matrix
 
         if top_part:
@@ -134,8 +143,9 @@ class LDrawNode:
 
         # always process geometry_data if this is a subpart or there is no geometry_data
         # if geometry_data exists, this is a top level part that has already been processed so don't process this key again
+
         is_top = top_part or part_model
-        if geometry_data is None or ImportOptions.preserve_hierarchy:
+        if not is_top or geometry_data is None:
             if is_top:
                 geometry_data = GeometryData()
 
@@ -253,9 +263,7 @@ class LDrawNode:
             mesh = ldraw_mesh.create_mesh(key, geometry_data, color_code, return_mesh=return_mesh)
             if return_mesh:
                 return mesh
-            obj = ldraw_object.create_object(mesh, geometry_data, color_code, obj_matrix, collection, self.is_root, self.root_object)
-            if self.is_root:
-              self.root_object = obj
+            obj = ldraw_object.create_object(mesh, geometry_data, color_code, obj_matrix, collection, self.is_root)
 
             if ImportOptions.import_edges:
                 edge_key = f"e_{geometry_data.key}"

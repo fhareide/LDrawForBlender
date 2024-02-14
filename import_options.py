@@ -52,7 +52,7 @@ class ImportOptions:
     defaults["use_freestyle_edges"] = False
     use_freestyle_edges = defaults["use_freestyle_edges"]
 
-    defaults["import_scale"] = 0.04
+    defaults["import_scale"] = 1.0
     import_scale = defaults["import_scale"]
 
     defaults["parent_to_empty"] = False  # True False

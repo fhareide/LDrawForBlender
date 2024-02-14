@@ -22,6 +22,16 @@ def do_import(filepath, color_code="16", return_mesh=False):
     ImportSettings.save_settings()
     ImportSettings.apply_settings()
 
+    BlenderMaterials.reset_caches()
+    FileSystem.reset_caches()
+    LDrawColor.reset_caches()
+    LDrawFile.reset_caches()
+    LDrawNode.reset_caches()
+    group.reset_caches()
+    ldraw_meta.reset_caches()
+    ldraw_object.reset_caches()
+    matrices.reset_caches()
+
     FileSystem.build_search_paths(parent_filepath=filepath)
     LDrawFile.read_color_table()
     BlenderMaterials.create_blender_node_groups()
@@ -46,15 +56,6 @@ def do_import(filepath, color_code="16", return_mesh=False):
     # s = {str(k): v for k, v in sorted(LDrawNode.geometry_datas2.items(), key=lambda ele: ele[1], reverse=True)}
     # helpers.write_json("gs2.json", s, indent=4)
 
-    BlenderMaterials.reset_caches()
-    FileSystem.reset_caches()
-    LDrawColor.reset_caches()
-    LDrawFile.reset_caches()
-    LDrawNode.reset_caches()
-    group.reset_caches()
-    ldraw_meta.reset_caches()
-    ldraw_object.reset_caches()
-    matrices.reset_caches()
 
     return obj
 
