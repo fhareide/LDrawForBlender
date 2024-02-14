@@ -326,7 +326,7 @@ def __export_polygons(obj, aa, lines):
                     line.append(__fix_round(vv, precision))
             lines.append(line)
         # elif ek in shallow: # for best results, if edge isn't sharp, it's a condline
-        else:
+        """ else:
             if not obj.ldraw_props.export_shade_smooth:
                 continue
 
@@ -369,7 +369,7 @@ def __export_polygons(obj, aa, lines):
                 for vv in co:
                     line.append(__fix_round(vv, precision))
 
-            lines.append(line)
+            lines.append(line) """
 
     bpy.data.meshes.remove(mesh)
 
