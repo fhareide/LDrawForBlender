@@ -7,7 +7,7 @@ class ExportOptions:
     defaults["merge_distance"] = 0.05
     merge_distance = defaults["merge_distance"]
 
-    defaults["triangulate"] = False
+    defaults["triangulate"] = True
     triangulate = defaults["triangulate"]
 
     defaults["ngon_handling"] = "triangulate"

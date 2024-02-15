@@ -20,7 +20,7 @@ from . import ldraw_operators
 def register():
     ldraw_props.register()
     operator_import.register()
-    operator_export.register()
+    #operator_export.register()
     operator_panel_ldraw.register()
     ldraw_operators.register()
 
@@ -28,7 +28,7 @@ def register():
 def unregister():
     ldraw_props.unregister()
     operator_import.unregister()
-    operator_export.unregister()
+    #operator_export.unregister()
     operator_panel_ldraw.unregister()
     ldraw_operators.unregister()
 

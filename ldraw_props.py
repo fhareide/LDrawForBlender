@@ -295,6 +295,49 @@ class LDrawProps(bpy.types.PropertyGroup):
         subtype='DIR_PATH'
     )
 
+    use_alt_colors: bpy.props.BoolProperty(
+        name="Use alternate colors",
+        # options={'HIDDEN'},
+        description="Use LDCfgalt.ldr",
+        default=True,
+    )
+
+    selection_only: bpy.props.BoolProperty(
+        name="Selection only",
+        description="Export selected objects only",
+        default=ExportOptions.selection_only,
+    )
+
+    triangulate: bpy.props.BoolProperty(
+        name="Triangulate faces",
+        description="Triangulate all faces",
+        default=ExportOptions.triangulate,
+    )
+
+    remove_doubles: bpy.props.BoolProperty(
+        name="Remove doubles",
+        description="Merge overlapping vertices",
+        default=ExportOptions.remove_doubles,
+    )
+
+    merge_distance: bpy.props.FloatProperty(
+        name="Merge distance",
+        description="Maximum distance between elements to merge",
+        default=0.05,
+        precision=3,
+        min=0.0,
+    )
+
+    ngon_handling: bpy.props.EnumProperty(
+        name="Ngon handling",
+        description="What to do with ngons",
+        default="triangulate",
+        items=[
+            ("skip", "Skip", "Don't export ngons at all"),
+            ("triangulate", "Triangulate", "Triangulate ngons"),
+        ],
+    )
+
     # color: bpy.props.FloatVectorProperty(
     #     name="Hex Value",
     #     subtype='COLOR',

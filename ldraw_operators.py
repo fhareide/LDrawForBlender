@@ -4,6 +4,8 @@ import re
 
 from .definitions import APP_ROOT
 from .import_options import ImportOptions
+from .export_options import ExportOptions
+from .ldraw_color import LDrawColor
 from . import matrices
 from . import blender_import
 from . import ldraw_export
@@ -110,7 +112,7 @@ class BatchExportOperator(bpy.types.Operator):
     """Batch export selected parts"""
     bl_idname = "export_ldraw.batch_export"
     bl_label = "Export selected parts"
-    bl_options = {'UNDO'}
+    bl_description = "Export all selected parts to LDraw files"
 
     def execute(self, context):
         scene = bpy.context.scene
@@ -129,6 +131,13 @@ class BatchExportOperator(bpy.types.Operator):
         selection = bpy.context.selected_objects
 
         bpy.ops.object.select_all(action='DESELECT')
+
+        LDrawColor.use_alt_colors = scene.ldraw_props.use_alt_colors
+
+        ExportOptions.remove_doubles = scene.ldraw_props.remove_doubles
+        ExportOptions.merge_distance = scene.ldraw_props.merge_distance
+        ExportOptions.triangulate = scene.ldraw_props.triangulate
+        ExportOptions.ngon_handling = scene.ldraw_props.ngon_handling
 
         for obj in selection:
           obj.select_set(True)

@@ -133,12 +133,22 @@ class CO_PT_ldraw_ex_panel(bpy.types.Panel):
 
         layout.separator(factor=0.3)
         col = layout.column()
-        col.operator(ldraw_operators.BatchExportOperator.bl_idname)
+        col.label(text="Export Options")
+        col.prop(scene.ldraw_props, "use_alt_colors")
 
-        if not do_poll(context):
-          return
-
+        layout.separator(factor=0.3)
         col = layout.column()
+        col.label(text="Cleanup Options")
+        col.prop(scene.ldraw_props, "remove_doubles")
+        col.prop(scene.ldraw_props, "merge_distance")
+        col.prop(scene.ldraw_props, "triangulate")
+        col.prop(scene.ldraw_props, "ngon_handling")
+
+        layout.separator(factor=1)
+        exportButton = layout.row()
+        exportButton.scale_y = 2.0
+        exportButton.operator(ldraw_operators.BatchExportOperator.bl_idname)
+        layout.separator(factor=1)
         
         #col.prop(obj.ldraw_props, 'export_shade_smooth')
         #col.prop(obj.ldraw_props, 'invert_import_scale_matrix')
