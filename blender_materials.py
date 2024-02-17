@@ -45,12 +45,13 @@ class BlenderMaterials:
             node_group.use_fake_user = True
 
     @classmethod
-    def get_material(cls, color_code, bfc_certified=True, part_slopes=None, parts_cloth=False, texmap=None, pe_texmap=None, easy_key=False):
+    def get_material(cls, color_code, bfc_certified=True, part_slopes=None, parts_cloth=False, texmap=None, pe_texmap=None, easy_key=True, mark_as_asset=False):
+            
         color = LDrawColor.get_color(color_code)
         bfc_certified = bfc_certified is True
 
         if easy_key:
-            key = color_code
+            key = color_code + "-" + color.name
         else:
             key = cls.__build_key(color, bfc_certified, part_slopes, parts_cloth, texmap, pe_texmap)
 
@@ -67,6 +68,7 @@ class BlenderMaterials:
             parts_cloth=parts_cloth,
             texmap=texmap,
             pe_texmap=pe_texmap,
+            mark_as_asset=mark_as_asset
         )
         return material
 
@@ -104,11 +106,16 @@ class BlenderMaterials:
         return key
 
     @classmethod
-    def __create_node_based_material(cls, key, color, bfc_certified=True, part_slopes=None, parts_cloth=False, texmap=None, pe_texmap=None):
+    def __create_node_based_material(cls, key, color, bfc_certified=True, part_slopes=None, parts_cloth=False, texmap=None, pe_texmap=None, mark_as_asset=False):
         material = bpy.data.materials.new(key)
         material.use_fake_user = True
         material.use_nodes = True
         material.use_backface_culling = bfc_certified
+        if mark_as_asset:
+          material.asset_mark()
+          material.asset_data.tags.new("ldraw")
+        
+        #bpy.data.materials.get(key).asset_mark()
 
         nodes = material.node_tree.nodes
         links = material.node_tree.links
@@ -141,6 +148,9 @@ class BlenderMaterials:
 
         if pe_texmap is not None:
             cls.__create_texture(nodes, links, -500, -140, pe_texmap, mix_rgb_node.inputs["Color2"], mix_rgb_node.inputs["Fac"])
+
+        if mark_as_asset:
+          material.asset_generate_preview()
 
         return material
 

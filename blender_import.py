@@ -62,25 +62,6 @@ def do_import(filepath, color_code="16", return_mesh=False):
 def __load_materials(file):
     ImportOptions.parent_to_empty = False
 
-    # slope texture demonstration
-    obj = do_import('3044.dat')
-    if obj is not None:
-        obj.location.x = 0.0
-        obj.location.y = 5.0
-        obj.location.z = 0.5
-
-    # texmap demonstration
-    obj = do_import('27062p01.dat')
-    if obj is not None:
-        obj.location.x = 3
-        obj.location.y = 5
-
-    # cloth demonstration
-    obj = do_import('50231.dat')
-    if obj is not None:
-        obj.location.x = 6
-        obj.location.y = 5
-
     colors = {}
     group_name = 'blank'
     for line in file.lines:
@@ -97,46 +78,50 @@ def __load_materials(file):
             continue
 
     j = 0
-    for codes in colors.items():
-        for i, color_code in enumerate(codes):
-            bm = bmesh.new()
+    for collection_name, codes in colors.items():
+      scene_collection = group.get_scene_collection()
+      collection = group.get_collection(collection_name, scene_collection)
 
-            monkey = True
-            if monkey:
-                prefix = 'monkey'
-                bmesh.ops.create_monkey(bm)
-            else:
-                prefix = 'cube'
-                bmesh.ops.create_cube(bm, size=1.0)
+      for i, color_code in enumerate(codes):
+        bm = bmesh.new()
 
-            helpers.ensure_bmesh(bm)
+        monkey = True
+        if monkey:
+            prefix = 'monkey'
+            bmesh.ops.create_monkey(bm)
+        else:
+            prefix = 'cube'
+            bmesh.ops.create_cube(bm, size=1.0)
 
-            for f in bm.faces:
-                f.smooth = True
+        helpers.ensure_bmesh(bm)
 
-            mesh = bpy.data.meshes.new(f"{prefix}_{color_code}")
-            mesh[strings.ldraw_color_code_key] = color_code
+        for f in bm.faces:
+            f.smooth = True
 
-            material = BlenderMaterials.get_material(color_code, easy_key=True)
+        mesh = bpy.data.meshes.new(f"{prefix}_{color_code}")
+        mesh[strings.ldraw_color_code_key] = color_code
 
-            # https://blender.stackexchange.com/questions/23905/select-faces-depending-on-material
-            if material.name not in mesh.materials:
-                mesh.materials.append(material)
-            for face in bm.faces:
-                face.material_index = mesh.materials.find(material.name)
+        material = BlenderMaterials.get_material(color_code, easy_key=True, mark_as_asset=True)
 
-            helpers.finish_bmesh(bm, mesh)
-            helpers.finish_mesh(mesh)
+        # https://blender.stackexchange.com/questions/23905/select-faces-depending-on-material
+        if material.name not in mesh.materials:
+            mesh.materials.append(material)
+        for face in bm.faces:
+            face.material_index = mesh.materials.find(material.name)
 
-            obj = bpy.data.objects.new(mesh.name, mesh)
-            obj[strings.ldraw_filename_key] = file.name
-            obj[strings.ldraw_color_code_key] = color_code
+        helpers.finish_bmesh(bm, mesh)
+        helpers.finish_mesh(mesh)
 
-            obj.modifiers.new("Subdivision", type='SUBSURF')
-            obj.location.x = i * 3
-            obj.location.y = -j * 3
+        obj = bpy.data.objects.new(mesh.name, mesh)
+        obj[strings.ldraw_filename_key] = file.name
+        obj[strings.ldraw_color_code_key] = color_code
 
-            color = LDrawColor.get_color(color_code)
-            obj.color = color.linear_color_a
+        obj.modifiers.new("Subdivision", type='SUBSURF')
+        obj.location.x = i * 3
+        obj.location.y = -j * 3
 
-        j += 1
+        color = LDrawColor.get_color(color_code)
+        obj.color = color.linear_color_a
+
+        group.link_obj(collection, obj)
+      j += 1
