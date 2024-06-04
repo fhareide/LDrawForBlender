@@ -76,7 +76,7 @@ class LDrawNode:
         parent_matrix = parent_matrix or matrices.identity_matrix
         accum_matrix = accum_matrix or matrices.identity_matrix
 
-        if self.is_root or self.file.is_subpart():
+        if self.is_root:
           self.matrix = self.matrix @ matrices.rotation_matrix
 
 
@@ -110,17 +110,23 @@ class LDrawNode:
         # TODO: is_shortcut_model splits 99141c01.dat and u9158.dat into its subparts -
         #  u9158.dat - ensure the battery contacts are correct
 
-        top_part = geometry_data is None and self.file.is_like_part() or self.file.is_subpart()
+        top_part = geometry_data is None and self.file.is_like_part()
 
         part_model = self.file.is_like_stud()
         part_model = False
+
+        # Treat subparts as top parts if preserve_hierarchy is True
+        if ImportOptions.preserve_hierarchy and self.file.is_subpart():
+            top_part = True
+
         top_part = top_part or part_model
 
         if top_part:
             # top-level part
             LDrawNode.part_count += 1
             geometry_data = LDrawNode.geometry_datas.get(geometry_data_key)
-            current_matrix = current_matrix @ matrices.reverse_rotation_matrix
+            if self.is_root:
+              current_matrix = current_matrix @ matrices.reverse_rotation_matrix
             # clean up floating point errors
             for i in range(len(current_matrix)):
                 for j in range(len(current_matrix[i])):
@@ -256,6 +262,9 @@ class LDrawNode:
                 obj_matrix = current_matrix
                 obj_matrix = child_matrix
                 obj_matrix = accum_matrix @ self.matrix
+
+            if ImportOptions.preserve_hierarchy and self.file.is_subpart():
+              obj_matrix = parent_matrix  @ self.matrix
 
             # blender mesh data is unique also based on color
             # this means a geometry_data for a file is created only once, but a mesh is created for every color that uses that geometry_data
