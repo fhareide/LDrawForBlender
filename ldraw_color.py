@@ -49,6 +49,10 @@ class LDrawColor:
         cls.__colors.clear()
         cls.__bad_color = None
 
+    @classmethod
+    def get_all_color_codes(cls):
+        return list(cls.__colors.keys())
+
     def __init__(self):
         self.name = None
         self.code = None

@@ -10,6 +10,7 @@ bl_info = {
     "category": "Import-Export",
 }
 
+from . import addon_preferences
 from . import ldraw_props
 from . import operator_import
 from . import operator_export
@@ -18,6 +19,7 @@ from . import ldraw_operators
 
 
 def register():
+    addon_preferences.register()
     ldraw_props.register()
     operator_import.register()
     #operator_export.register()
@@ -26,6 +28,7 @@ def register():
 
 
 def unregister():
+    addon_preferences.unregister()
     ldraw_props.unregister()
     operator_import.unregister()
     #operator_export.unregister()

@@ -9,6 +9,22 @@ from .filesystem import FileSystem
 from . import strings
 
 
+def _get_socket(collection, *names):
+    """Look up a node socket by trying multiple name/identifier candidates.
+    Blender 4.x changed socket identifiers for several built-in and custom nodes.
+    Returns the first match found, or None."""
+    for name in names:
+        s = collection.get(name)
+        if s is not None:
+            return s
+    # Last resort: search by display name in case the identifier differs
+    for name in names:
+        for s in collection:
+            if s.name == name:
+                return s
+    return None
+
+
 class BlenderMaterials:
     __key_map = {}
 
@@ -130,7 +146,12 @@ class BlenderMaterials:
         material[strings.ldraw_color_code_key] = color.code
         material[strings.ldraw_color_name_key] = color.name
 
-        links.new(node.outputs["Shader"], out.inputs["Surface"])
+        shader_out = _get_socket(node.outputs, "Shader", "BSDF", "Emission", "Volume")
+        if shader_out is None and node.outputs:
+            shader_out = node.outputs[0]
+        surface_in = _get_socket(out.inputs, "Surface")
+        if shader_out and surface_in:
+            links.new(shader_out, surface_in)
 
         is_transparent = color.alpha < 1.0
         if is_transparent:
@@ -144,10 +165,17 @@ class BlenderMaterials:
             cls.__create_cloth(nodes, links, node, -200, -100)
 
         if texmap is not None:
-            cls.__create_texmap(nodes, links, -500, -140, texmap, mix_rgb_node.inputs["Color2"], mix_rgb_node.inputs["Fac"], node.inputs["Specular"])
+            color2_input = _get_socket(mix_rgb_node.inputs, "Color2", "B")
+            fac_input = _get_socket(mix_rgb_node.inputs, "Fac", "Factor")
+            specular_input = _get_socket(node.inputs, "Specular", "Specular IOR Level")
+            if color2_input and fac_input:
+                cls.__create_texmap(nodes, links, -500, -140, texmap, color2_input, fac_input, specular_input)
 
         if pe_texmap is not None:
-            cls.__create_texture(nodes, links, -500, -140, pe_texmap, mix_rgb_node.inputs["Color2"], mix_rgb_node.inputs["Fac"])
+            color2_input = _get_socket(mix_rgb_node.inputs, "Color2", "B")
+            fac_input = _get_socket(mix_rgb_node.inputs, "Fac", "Factor")
+            if color2_input and fac_input:
+                cls.__create_texture(nodes, links, -500, -140, pe_texmap, color2_input, fac_input)
 
         if mark_as_asset:
           material.asset_generate_preview()
@@ -211,12 +239,25 @@ class BlenderMaterials:
         rgb_node.outputs["Color"].default_value = diff_color
 
         mix_rgb_node = cls.__node_mix_rgb(nodes, x + -400, y + 0)
-        mix_rgb_node.inputs["Fac"].default_value = 0
+
+        # Blender 4.x renamed MixRGB sockets: Fac→Factor, Color1→A, Color2→B, out Color→Result
+        fac_input = _get_socket(mix_rgb_node.inputs, "Fac", "Factor")
+        if fac_input is not None:
+            fac_input.default_value = 0
+
+        color1_input = _get_socket(mix_rgb_node.inputs, "Color1", "A")
+        mix_out = _get_socket(mix_rgb_node.outputs, "Color", "Result")
 
         node = cls.__node_color_code_material(nodes, color, x + -200, y + 0)
 
-        links.new(rgb_node.outputs["Color"], mix_rgb_node.inputs["Color1"])
-        links.new(mix_rgb_node.outputs["Color"], node.inputs["Color"])
+        # Wire the RGB node → mix → LEGO node group color input
+        if color1_input is not None:
+            links.new(rgb_node.outputs["Color"], color1_input)
+
+        # LEGO node group "Color" input — identifier may differ in 4.5-loaded blend files
+        color_input = _get_socket(node.inputs, "Color", "Base Color")
+        if mix_out is not None and color_input is not None:
+            links.new(mix_out, color_input)
 
         return node, rgb_node, mix_rgb_node
 
@@ -263,21 +304,24 @@ class BlenderMaterials:
     # TODO: slight variation in strength for each material
     def __create_slope(cls, nodes, links, node, x, y, part_slopes=None):
         slope_texture = cls.__node_slope_texture_by_angle(nodes, x, y, part_slopes)
-        links.new(slope_texture.outputs["Normal"], node.inputs["Normal"])
+        normal_out = _get_socket(slope_texture.outputs, "Normal")
+        normal_in = _get_socket(node.inputs, "Normal")
+        if normal_out and normal_in:
+            links.new(normal_out, normal_in)
 
     @classmethod
     def __node_slope_texture_by_angle(cls, nodes, x, y, angles):
         group_name = "_Slope Texture By Angle"
         node = cls.__node_group(group_name, nodes, x, y)
-        if len(angles) > 0:
-            node.inputs["Angle 1"].default_value = angles[0]
-        if len(angles) > 1:
-            node.inputs["Angle 2"].default_value = angles[1]
-        if len(angles) > 2:
-            node.inputs["Angle 3"].default_value = angles[2]
-        if len(angles) > 3:
-            node.inputs["Angle 4"].default_value = angles[3]
-        node.inputs["Strength"].default_value = 0.6
+        angle_names = ["Angle 1", "Angle 2", "Angle 3", "Angle 4"]
+        for i, angle_name in enumerate(angle_names):
+            if i < len(angles):
+                inp = _get_socket(node.inputs, angle_name)
+                if inp:
+                    inp.default_value = angles[i]
+        strength_in = _get_socket(node.inputs, "Strength")
+        if strength_in:
+            strength_in.default_value = 0.6
         return node
 
     @classmethod
@@ -326,8 +370,14 @@ class BlenderMaterials:
     @classmethod
     def __create_cloth(cls, nodes, links, node, x, y):
         cloth = cls.__node_cloth(nodes, x, y)
-        links.new(cloth.outputs["Normal"], node.inputs["Normal"])
-        links.new(cloth.outputs["Specular"], node.inputs["Specular"])
+        normal_out = _get_socket(cloth.outputs, "Normal")
+        normal_in = _get_socket(node.inputs, "Normal")
+        if normal_out and normal_in:
+            links.new(normal_out, normal_in)
+        specular_out = _get_socket(cloth.outputs, "Specular")
+        specular_in = _get_socket(node.inputs, "Specular", "Specular IOR Level")
+        if specular_out and specular_in:
+            links.new(specular_out, specular_in)
 
     @classmethod
     def __node_cloth(cls, nodes, x, y):
@@ -363,7 +413,9 @@ class BlenderMaterials:
     def __node_lego_emission(cls, nodes, luminance, x, y):
         group_name = "LEGO Emission"
         node = cls.__node_group(group_name, nodes, x, y)
-        node.inputs["Luminance"].default_value = luminance
+        lum_in = _get_socket(node.inputs, "Luminance")
+        if lum_in:
+            lum_in.default_value = luminance
         return node
 
     @classmethod
@@ -388,21 +440,27 @@ class BlenderMaterials:
     def __node_lego_opal(cls, nodes, glitter_color, x, y):
         group_name = "LEGO Opal"
         node = cls.__node_group(group_name, nodes, x, y)
-        node.inputs["Glitter Color"].default_value = glitter_color
+        glitter_in = _get_socket(node.inputs, "Glitter Color")
+        if glitter_in:
+            glitter_in.default_value = glitter_color
         return node
 
     @classmethod
     def __node_lego_glitter(cls, nodes, glitter_color, x, y):
         group_name = "LEGO Glitter"
         node = cls.__node_group(group_name, nodes, x, y)
-        node.inputs["Glitter Color"].default_value = glitter_color
+        glitter_in = _get_socket(node.inputs, "Glitter Color")
+        if glitter_in:
+            glitter_in.default_value = glitter_color
         return node
 
     @classmethod
     def __node_lego_speckle(cls, nodes, speckle_color, x, y):
         group_name = "LEGO Speckle"
         node = cls.__node_group(group_name, nodes, x, y)
-        node.inputs["Speckle Color"].default_value = speckle_color
+        speckle_in = _get_socket(node.inputs, "Speckle Color")
+        if speckle_in:
+            speckle_in.default_value = speckle_color
         return node
 
     @classmethod
