@@ -1,6 +1,7 @@
 import bpy
 import os
 import re
+import time
 
 from .definitions import APP_ROOT
 from .import_options import ImportOptions
@@ -295,65 +296,98 @@ def _get_catalog_id(ldraw_path):
     return new_uuid
 
 
-def _open_asset_browser(context, library_name=None):
-    """Split the 3D viewport horizontally and open an Asset Browser in the new lower 20% area.
-    If library_name is given, switch the browser to show that registered library.
-    Reuses an existing asset browser panel if one is already open."""
-    asset_space = None
+def _set_asset_browser_library(space, library_name):
+    """Switch a FILE_BROWSER space to a named asset library. Tries both known property names."""
+    for attr in ('asset_library_ref', 'asset_library_reference'):
+        try:
+            setattr(space.params, attr, library_name)
+            return
+        except (AttributeError, TypeError):
+            pass
 
-    # Reuse an existing asset browser if already visible
+
+def _open_asset_browser(context, library_name=None):
+    """Split the 3D viewport horizontally (80/20) and open an Asset Browser in the new lower area.
+    If library_name is given, switch the browser to that registered library."""
+    asset_browser_space = None
+
+    # Re-use an existing asset browser if one is already open
     for area in context.screen.areas:
         if area.type == 'FILE_BROWSER':
             space = area.spaces.active
             if space and space.type == 'FILE_BROWSER' and space.browse_mode == 'ASSETS':
-                asset_space = space
+                asset_browser_space = space
                 break
 
-    if asset_space is None:
-        # Prefer context.area (where the button lives) if it is a VIEW_3D,
-        # otherwise search for any VIEW_3D on the screen.
-        target_area = context.area if (context.area and context.area.type == 'VIEW_3D') else None
-        if target_area is None:
-            for area in context.screen.areas:
-                if area.type == 'VIEW_3D':
-                    target_area = area
-                    break
+    if asset_browser_space is None:
+        # No existing browser — split the 3D viewport
+        view3d_area = None
+        for area in context.screen.areas:
+            if area.type == 'VIEW_3D':
+                view3d_area = area
+                break
 
-        if target_area is None:
+        if view3d_area is None:
             return
 
-        # area_split in Blender 4.x requires the WINDOW region to be in the override
-        window_region = next((r for r in target_area.regions if r.type == 'WINDOW'), None)
-        if window_region is None:
-            return
+        old_area_ids = {id(a) for a in context.screen.areas}
 
-        # With HORIZONTAL split Blender always creates the NEW area at the TOP and
-        # keeps the ORIGINAL area at the BOTTOM (resized).
-        # factor=0.2 → original (bottom) keeps 20%, new (top) gets 80% as VIEW_3D.
-        # We then convert the original bottom area to the Asset Browser.
         try:
-            with context.temp_override(area=target_area, region=window_region):
-                bpy.ops.screen.area_split(direction='HORIZONTAL', factor=0.2)
-        except Exception:
-            return
+            with context.temp_override(area=view3d_area):
+                bpy.ops.screen.area_split(direction='HORIZONTAL', factor=0.8)
+        except AttributeError:
+            # Blender < 3.2 fallback
+            override = context.copy()
+            override['area'] = view3d_area
+            bpy.ops.screen.area_split(override, direction='HORIZONTAL', factor=0.8)
 
-        # target_area is now the bottom 20% — convert it to the Asset Browser
-        target_area.type = 'FILE_BROWSER'
-        asset_space = target_area.spaces.active
-        if asset_space and asset_space.type == 'FILE_BROWSER':
-            asset_space.browse_mode = 'ASSETS'
+        for area in context.screen.areas:
+            if id(area) not in old_area_ids:
+                area.type = 'FILE_BROWSER'
+                space = area.spaces.active
+                if space and space.type == 'FILE_BROWSER':
+                    space.browse_mode = 'ASSETS'
+                    asset_browser_space = space
+                break
 
-    # Switch to the registered library so catalog names resolve correctly
-    if asset_space and library_name:
-        try:
-            asset_space.params.asset_library_reference = library_name
-        except Exception:
-            pass
+    if library_name and asset_browser_space:
+        _set_asset_browser_library(asset_browser_space, library_name)
+
+
+def _writable_ldraw_dir():
+    """Return the best writable LDraw directory based on the current FileSystem settings.
+
+    Uses ldraw_path by default. studio_ldraw_path is only considered when prefer_studio
+    is enabled — and even then only as a fallback if ldraw_path is not writable.
+    Falls back to the directory of the located config file as a last resort.
+    """
+    from .filesystem import FileSystem
+
+    if FileSystem.prefer_studio:
+        primary = FileSystem.studio_ldraw_path
+        secondary = FileSystem.ldraw_path
+    else:
+        primary = FileSystem.ldraw_path
+        secondary = FileSystem.studio_ldraw_path
+
+    candidates = []
+    if primary:
+        candidates.append(primary)
+    if secondary:
+        candidates.append(secondary)
+
+    config_path = FileSystem.locate("LDCfgalt.ldr") or FileSystem.locate("LDConfig.ldr")
+    if config_path:
+        candidates.append(os.path.dirname(config_path))
+
+    for candidate in candidates:
+        if os.path.isdir(candidate) and os.access(candidate, os.W_OK):
+            return candidate
+    return None
 
 
 def _generate_materials():
     """Set up paths, read LDConfig.ldr, create node groups, and return (materials, count, ldraw_dir).
-    ldraw_dir is the directory of the config file that was actually found.
     Returns (None, 0, None) on failure."""
     from .filesystem import FileSystem
     from .ldraw_file import LDrawFile
@@ -373,23 +407,7 @@ def _generate_materials():
     if ldraw_file is None:
         return None, 0, None
 
-    # Find the best writable LDraw directory.
-    # Check candidates in priority order: user LDraw path first, then Studio, then the
-    # directory of the located config file — taking the first one that is writable.
-    ldraw_dir = None
-    candidates = []
-    if FileSystem.ldraw_path:
-        candidates.append(FileSystem.ldraw_path)
-    if FileSystem.studio_ldraw_path:
-        candidates.append(FileSystem.studio_ldraw_path)
-    config_path = FileSystem.locate("LDCfgalt.ldr") or FileSystem.locate("LDConfig.ldr")
-    if config_path:
-        candidates.append(os.path.dirname(config_path))
-
-    for candidate in candidates:
-        if os.path.isdir(candidate) and os.access(candidate, os.W_OK):
-            ldraw_dir = candidate
-            break
+    ldraw_dir = _writable_ldraw_dir()
 
     BlenderMaterials.create_blender_node_groups()
 
@@ -401,113 +419,48 @@ def _generate_materials():
     return materials, len(materials), ldraw_dir
 
 
-def _save_and_register(materials, ldraw_dir):
-    """Save materials to ldrawcolors.blend, update blender_assets.cats.txt, and register
-    the LDraw folder as an asset library. Returns the registered library name, or None."""
-    if not ldraw_dir or not os.path.isdir(ldraw_dir):
-        return None
+_PREVIEW_POLL_INTERVAL = 0.3   # seconds between each readiness check
+_PREVIEW_TIMEOUT      = 180.0  # give up waiting after 3 minutes
 
-    catalog_id = _get_catalog_id(ldraw_dir)
-    for mat in materials:
-        if mat and mat.asset_data is not None:
-            mat.asset_data.catalog_id = catalog_id
-
-    datablocks = {m for m in materials if m is not None}
-    for ng in bpy.data.node_groups:
-        if ng.name.startswith("_") or ng.name.startswith("LEGO"):
-            datablocks.add(ng)
-
-    blend_path = os.path.join(ldraw_dir, "ldrawcolors.blend")
-    bpy.data.libraries.write(blend_path, datablocks, fake_user=True, compress=True)
-
-    return _register_library(ldraw_dir)
+# Shared state published by GenerateLDrawMaterialsOperator, consumed by SaveLDrawMaterialLibraryOperator
+_ready_materials  = []
+_ready_datablocks = set()
+_ready_ldraw_dir  = ""
 
 
-def _register_library(ldraw_dir):
-    """Register ldraw_dir as a Blender asset library and save preferences.
-    Returns the library name."""
-    library_name = "LDraw Colors"
+def _register_asset_library(ldraw_path):
     prefs = bpy.context.preferences
     asset_libs = prefs.filepaths.asset_libraries
-    norm_path = os.path.normpath(ldraw_dir)
+    norm_path = os.path.normpath(ldraw_path)
 
     for lib in asset_libs:
         if os.path.normpath(lib.path) == norm_path:
-            return lib.name  # Already registered — return its current name
+            return  # Already registered
 
-    bpy.ops.preferences.asset_library_add(directory=ldraw_dir)
+    bpy.ops.preferences.asset_library_add(directory=ldraw_path)
     if asset_libs:
-        asset_libs[-1].name = library_name
+        asset_libs[-1].name = "LDraw Colors"
 
     bpy.ops.wm.save_userpref()
-    return library_name
 
 
-class GenerateAllMaterialsOperator(bpy.types.Operator):
-    """Generate all LDraw materials from LDConfig.ldr, save to ldrawcolors.blend, and open Asset Browser"""
-    bl_idname = "ldraw.generate_all_materials"
+class GenerateLDrawMaterialsOperator(bpy.types.Operator):
+    """Generate all LDraw materials and wait for preview thumbnails to finish rendering"""
+    bl_idname = "ldraw.generate_materials"
     bl_label = "Generate LDraw Materials"
     bl_description = (
-        "Generates all LDraw materials from LDConfig.ldr, saves them to ldrawcolors.blend "
-        "in the LDraw folder, and opens them in the Asset Browser under LdrawColors"
-    )
-    bl_options = {'UNDO'}
-
-    def execute(self, context):
-        materials, count, ldraw_dir = _generate_materials()
-
-        if materials is None:
-            self.report({'ERROR'}, "Could not find LDConfig.ldr. Check your LDraw path in addon preferences.")
-            return {'CANCELLED'}
-
-        library_name = _save_and_register(materials, ldraw_dir)
-        _open_asset_browser(context, library_name=library_name)
-        self.report({'INFO'}, f"Generated {count} LDraw materials — saved to {ldraw_dir}.")
-        return {'FINISHED'}
-
-
-class SaveLDrawMaterialLibraryOperator(bpy.types.Operator):
-    """Generate all LDraw materials, save them to ldrawcolors.blend, and register as an Asset Library"""
-    bl_idname = "ldraw.save_material_library"
-    bl_label = "Save LDraw Material Library..."
-    bl_description = (
-        "Generates all LDraw materials, saves them to ldrawcolors.blend in the LDraw folder, "
-        "and registers the folder as a persistent Blender Asset Library"
+        "Generates all LDraw materials from LDConfig.ldr and renders their preview "
+        "thumbnails. When finished, click 'Save to Asset Library' to persist them."
     )
 
-    def invoke(self, context, event):
-        return context.window_manager.invoke_props_dialog(self, width=460)
-
-    def draw(self, context):
-        from .filesystem import FileSystem
-        layout = self.layout
-        col = layout.column(align=True)
-
-        # Find the writable LDraw directory (same logic as _generate_materials)
-        candidates = []
-        if FileSystem.ldraw_path:
-            candidates.append(FileSystem.ldraw_path)
-        if FileSystem.studio_ldraw_path:
-            candidates.append(FileSystem.studio_ldraw_path)
-        config_path = FileSystem.locate("LDCfgalt.ldr") or FileSystem.locate("LDConfig.ldr")
-        if config_path:
-            candidates.append(os.path.dirname(config_path))
-        ldraw_path = next((c for c in candidates if os.path.isdir(c) and os.access(c, os.W_OK)), None)
-        ldraw_path = ldraw_path or FileSystem.ldraw_path or "(LDraw path not found)"
-        blend_path = os.path.join(ldraw_path, "ldrawcolors.blend")
-
-        col.label(text="The following actions will be performed:", icon='INFO')
-        col.separator(factor=0.5)
-        col.label(text="  1.  Generate all LDraw materials from LDConfig.ldr")
-        col.label(text=f"  2.  Save materials to:")
-        col.label(text=f"       {blend_path}")
-        col.label(text=f"  3.  Register as Blender Asset Library:")
-        col.label(text=f"       {ldraw_path}")
-        col.label(text="  4.  Save Blender preferences")
-        col.separator(factor=0.5)
-        col.label(text="Any existing ldrawcolors.blend will be overwritten.", icon='ERROR')
-
     def execute(self, context):
+        global _ready_materials, _ready_datablocks, _ready_ldraw_dir
+
+        # Clear any previously generated state so the save button grays out while regenerating
+        _ready_materials  = []
+        _ready_datablocks = set()
+        _ready_ldraw_dir  = ""
+
         materials, count, ldraw_dir = _generate_materials()
 
         if materials is None:
@@ -518,10 +471,183 @@ class SaveLDrawMaterialLibraryOperator(bpy.types.Operator):
             self.report({'ERROR'}, "Could not determine a writable LDraw folder.")
             return {'CANCELLED'}
 
-        library_name = _save_and_register(materials, ldraw_dir)
+        catalog_id = _get_catalog_id(ldraw_dir)
+        valid_mats = []
+        for mat in materials:
+            if mat and mat.asset_data is not None:
+                mat.asset_data.catalog_id = catalog_id
+                valid_mats.append(mat)
+
+        datablocks = set(valid_mats)
+        for ng in bpy.data.node_groups:
+            if ng.name.startswith("_") or ng.name.startswith("LEGO"):
+                datablocks.add(ng)
+
+        self._materials  = valid_mats
+        self._datablocks = datablocks
+        self._ldraw_dir  = ldraw_dir
+        self._total      = len(valid_mats)
+        self._start_time = time.time()
+
+        if self._total == 0:
+            self.report({'WARNING'}, "No LDraw materials were generated.")
+            return {'CANCELLED'}
+
+        context.window_manager.progress_begin(0, self._total)
+        context.window_manager.progress_update(0)
+
+        self._timer = context.window_manager.event_timer_add(
+            _PREVIEW_POLL_INTERVAL, window=context.window
+        )
+        context.window_manager.modal_handler_add(self)
+        return {'RUNNING_MODAL'}
+
+    def modal(self, context, event):
+        if event.type != 'TIMER':
+            return {'PASS_THROUGH'}
+
+        ready = sum(
+            1 for m in self._materials
+            if m.preview and m.preview.image_size[0] > 0
+        )
+
+        context.window_manager.progress_update(ready)
+
+        elapsed = time.time() - self._start_time
+        try:
+            context.workspace.status_text_set(
+                f"LDraw materials — generating previews: {ready}/{self._total}  ({elapsed:.0f}s)"
+            )
+        except Exception:
+            pass
+
+        timed_out = elapsed > _PREVIEW_TIMEOUT
+        if ready < self._total and not timed_out:
+            return {'RUNNING_MODAL'}
+
+        context.window_manager.event_timer_remove(self._timer)
+        self._timer = None
+        context.window_manager.progress_end()
+        try:
+            context.workspace.status_text_set(None)
+        except Exception:
+            pass
+
+        if timed_out and ready < self._total:
+            self.report(
+                {'WARNING'},
+                f"Preview timeout — {ready}/{self._total} thumbnails were ready. "
+                "You can still save to the library.",
+            )
+
+        # Publish state so the save operator can use it
+        global _ready_materials, _ready_datablocks, _ready_ldraw_dir
+        _ready_materials  = self._materials
+        _ready_datablocks = self._datablocks
+        _ready_ldraw_dir  = self._ldraw_dir
+
+        self.report(
+            {'INFO'},
+            f"Generated {len(_ready_materials)} LDraw materials — "
+            "click 'Save to Asset Library' to save them.",
+        )
+        return {'FINISHED'}
+
+
+class SaveLDrawMaterialLibraryOperator(bpy.types.Operator):
+    """Save generated LDraw materials to ldrawcolors.blend and register it as an Asset Library"""
+    bl_idname = "ldraw.save_material_library"
+    bl_label = "Save to Asset Library..."
+    bl_description = (
+        "Saves the generated LDraw materials to ldrawcolors.blend in the LDraw folder "
+        "and registers it as a persistent Blender Asset Library"
+    )
+
+    @classmethod
+    def poll(cls, context):
+        return len(_ready_materials) > 0
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self, width=460)
+
+    def draw(self, context):
+        from .filesystem import FileSystem
+        from .addon_preferences import apply_preferences
+        apply_preferences()
+        layout = self.layout
+        col = layout.column(align=True)
+
+        ldraw_path = _ready_ldraw_dir or FileSystem.ldraw_path or "(LDraw path not configured)"
+        blend_path = os.path.join(ldraw_path, "ldrawcolors.blend")
+
+        col.label(text=f"{len(_ready_materials)} materials are ready to save.", icon='INFO')
+        col.separator(factor=0.5)
+        col.label(text="The following actions will be performed:")
+        col.separator(factor=0.3)
+        col.label(text="  1.  Replace ldrawcolors.blend at:")
+        col.label(text=f"       {blend_path}")
+        col.label(text="  2.  Register as Blender Asset Library:")
+        col.label(text=f"       {ldraw_path}")
+        col.label(text="  3.  Save Blender preferences")
+        col.label(text="  4.  Remove generated materials from the current session")
+
+    def execute(self, context):
+        global _ready_materials, _ready_datablocks, _ready_ldraw_dir
+
+        if not _ready_materials:
+            self.report({'ERROR'}, "No materials ready. Run 'Generate LDraw Materials' first.")
+            return {'CANCELLED'}
+
+        ldraw_dir = _ready_ldraw_dir
+        if not ldraw_dir or not os.path.isdir(ldraw_dir):
+            self.report({'ERROR'}, "Could not determine a writable LDraw folder.")
+            return {'CANCELLED'}
+
         blend_path = os.path.join(ldraw_dir, "ldrawcolors.blend")
-        _open_asset_browser(context, library_name=library_name)
-        self.report({'INFO'}, f"Saved {count} materials to {blend_path} and registered as Asset Library.")
+
+        if os.path.isfile(blend_path):
+            os.remove(blend_path)
+
+        bpy.data.libraries.write(
+            blend_path, _ready_datablocks, fake_user=True, compress=True
+        )
+
+        # Remove the LDraw materials we generated from the current session.
+        # Only materials in _ready_materials are touched — built-in materials,
+        # brushes, and anything else already in the file are left completely alone.
+        # Skip any material that has users (assigned to a mesh object in the scene).
+        for mat in _ready_materials:
+            try:
+                if mat.users == 0:
+                    bpy.data.materials.remove(mat)
+                else:
+                    # Material is in use; unmark as asset so it does not clutter
+                    # the asset browser (it lives in ldrawcolors.blend now)
+                    mat.asset_clear()
+            except Exception:
+                pass
+        # Only remove LDraw-addon node-groups that are no longer referenced anywhere
+        for ng in list(bpy.data.node_groups):
+            if (ng.name.startswith("_") or ng.name.startswith("LEGO")) and ng.users == 0:
+                try:
+                    bpy.data.node_groups.remove(ng)
+                except Exception:
+                    pass
+
+        count = len(_ready_materials)
+
+        _ready_materials  = []
+        _ready_datablocks = set()
+        _ready_ldraw_dir  = ""
+
+        _register_asset_library(ldraw_dir)
+
+        try:
+            bpy.ops.asset.library_refresh()
+        except Exception:
+            pass
+
+        self.report({'INFO'}, f"Saved {count} LDraw materials to {blend_path}.")
         return {'FINISHED'}
 
 
@@ -535,7 +661,7 @@ classesToRegister = [
     RemoveBevelOperator,
     AddBevelOperator,
     AddEdgeSplitOperator,
-    GenerateAllMaterialsOperator,
+    GenerateLDrawMaterialsOperator,
     SaveLDrawMaterialLibraryOperator,
 ]
 

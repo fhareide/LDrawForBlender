@@ -9,22 +9,6 @@ from .filesystem import FileSystem
 from . import strings
 
 
-def _get_socket(collection, *names):
-    """Look up a node socket by trying multiple name/identifier candidates.
-    Blender 4.x changed socket identifiers for several built-in and custom nodes.
-    Returns the first match found, or None."""
-    for name in names:
-        s = collection.get(name)
-        if s is not None:
-            return s
-    # Last resort: search by display name in case the identifier differs
-    for name in names:
-        for s in collection:
-            if s.name == name:
-                return s
-    return None
-
-
 class BlenderMaterials:
     __key_map = {}
 
@@ -146,41 +130,95 @@ class BlenderMaterials:
         material[strings.ldraw_color_code_key] = color.code
         material[strings.ldraw_color_name_key] = color.name
 
-        shader_out = _get_socket(node.outputs, "Shader", "BSDF", "Emission", "Volume")
-        if shader_out is None and node.outputs:
-            shader_out = node.outputs[0]
-        surface_in = _get_socket(out.inputs, "Surface")
-        if shader_out and surface_in:
-            links.new(shader_out, surface_in)
+        shader_out = cls.__socket(node.outputs, "Shader", "BSDF")
 
-        is_transparent = color.alpha < 1.0
-        if is_transparent:
-            material.use_screen_refraction = True
-            material.refraction_depth = 0.5
+        if shader_out is None:
+            # The LEGO group nodes have no exposed sockets in this Blender version.
+            # Fall back to a Principled BSDF built directly from the LDraw color.
+            nodes.clear()
+            out = cls.__node_output_material(nodes, 300, 0)
+            cls.__build_principled_fallback(color, nodes, links, out)
+        else:
+            links.new(shader_out, out.inputs["Surface"])
 
-        if part_slopes is not None and len(part_slopes) > 0:
-            cls.__create_slope(nodes, links, node, -200, -220, part_slopes)
+            is_transparent = color.alpha < 1.0
+            if is_transparent:
+                material.refraction_depth = 0.5
 
-        if parts_cloth:
-            cls.__create_cloth(nodes, links, node, -200, -100)
+            if part_slopes is not None and len(part_slopes) > 0:
+                cls.__create_slope(nodes, links, node, -200, -220, part_slopes)
 
-        if texmap is not None:
-            color2_input = _get_socket(mix_rgb_node.inputs, "Color2", "B")
-            fac_input = _get_socket(mix_rgb_node.inputs, "Fac", "Factor")
-            specular_input = _get_socket(node.inputs, "Specular", "Specular IOR Level")
-            if color2_input and fac_input:
-                cls.__create_texmap(nodes, links, -500, -140, texmap, color2_input, fac_input, specular_input)
+            if parts_cloth:
+                cls.__create_cloth(nodes, links, node, -200, -100)
 
-        if pe_texmap is not None:
-            color2_input = _get_socket(mix_rgb_node.inputs, "Color2", "B")
-            fac_input = _get_socket(mix_rgb_node.inputs, "Fac", "Factor")
-            if color2_input and fac_input:
-                cls.__create_texture(nodes, links, -500, -140, pe_texmap, color2_input, fac_input)
+            if texmap is not None:
+                color2_in = cls.__socket(mix_rgb_node.inputs, "B", "Color2")
+                fac_in = cls.__socket(mix_rgb_node.inputs, "Factor", "Fac")
+                spec_in = cls.__socket(node.inputs, "Specular IOR Level", "Specular")
+                if color2_in is not None and fac_in is not None:
+                    cls.__create_texmap(nodes, links, -500, -140, texmap, color2_in, fac_in, spec_in)
+
+            if pe_texmap is not None:
+                color2_in = cls.__socket(mix_rgb_node.inputs, "B", "Color2")
+                fac_in = cls.__socket(mix_rgb_node.inputs, "Factor", "Fac")
+                if color2_in is not None and fac_in is not None:
+                    cls.__create_texture(nodes, links, -500, -140, pe_texmap, color2_in, fac_in)
 
         if mark_as_asset:
           material.asset_generate_preview()
 
         return material
+
+    @classmethod
+    def __build_principled_fallback(cls, color, nodes, links, out):
+        """Principled BSDF fallback used when LEGO group nodes have no exposed sockets."""
+        bsdf = nodes.new("ShaderNodeBsdfPrincipled")
+        bsdf.location = 0, 0
+
+        base = cls.__socket(bsdf.inputs, "Base Color", "Color")
+        if base is not None:
+            base.default_value = color.linear_color_a
+
+        is_transparent = color.alpha < 1.0
+        alpha_in = cls.__socket(bsdf.inputs, "Alpha")
+        if alpha_in is not None:
+            alpha_in.default_value = color.alpha
+
+        if is_transparent:
+            trans_in = cls.__socket(bsdf.inputs, "Transmission Weight", "Transmission")
+            if trans_in is not None:
+                trans_in.default_value = 1.0
+            ior_in = cls.__socket(bsdf.inputs, "IOR")
+            if ior_in is not None:
+                ior_in.default_value = 1.46
+
+        mat_name = color.material_name or ""
+        rough_in = cls.__socket(bsdf.inputs, "Roughness")
+        metal_in = cls.__socket(bsdf.inputs, "Metallic")
+
+        if mat_name == "chrome":
+            if rough_in: rough_in.default_value = 0.05
+            if metal_in: metal_in.default_value = 1.0
+        elif mat_name == "metal":
+            if rough_in: rough_in.default_value = 0.3
+            if metal_in: metal_in.default_value = 1.0
+        elif mat_name == "pearlescent":
+            if rough_in: rough_in.default_value = 0.3
+        elif mat_name == "rubber":
+            if rough_in: rough_in.default_value = 0.9
+        elif color.luminance > 0:
+            emit_in = cls.__socket(bsdf.inputs, "Emission Color", "Emission")
+            emit_str = cls.__socket(bsdf.inputs, "Emission Strength")
+            if emit_in is not None:
+                emit_in.default_value = color.linear_color_a
+            if emit_str is not None:
+                emit_str.default_value = color.luminance / 100.0
+        else:
+            if rough_in: rough_in.default_value = 0.5
+
+        bsdf_out = cls.__socket(bsdf.outputs, "BSDF")
+        if bsdf_out is not None:
+            links.new(bsdf_out, out.inputs["Surface"])
 
     @classmethod
     def __node_output_material(cls, nodes, x, y):
@@ -222,9 +260,30 @@ class BlenderMaterials:
 
     @classmethod
     def __node_mix_rgb(cls, nodes, x, y):
-        node = nodes.new("ShaderNodeMixRGB")
+        # ShaderNodeMixRGB was removed in Blender 4.3; use the generic ShaderNodeMix instead
+        if bpy.app.version >= (4, 3):
+            node = nodes.new("ShaderNodeMix")
+            node.data_type = 'RGBA'
+        else:
+            node = nodes.new("ShaderNodeMixRGB")
         node.location = x, y
         return node
+
+    @staticmethod
+    def __socket(collection, *names):
+        """Return the first socket whose name or identifier matches.
+        Returns None if the collection is empty or no match is found."""
+        for name in names:
+            s = collection.get(name)
+            if s is not None:
+                return s
+        # Blender 4.x may store sockets by identifier rather than display name — scan manually
+        for name in names:
+            for s in collection:
+                if s.name == name:
+                    return s
+        # Last resort: first socket, or None if the collection is empty
+        return collection[0] if len(collection) > 0 else None
 
     @classmethod
     def __node_vertex_color(cls, nodes, x, y):
@@ -239,25 +298,20 @@ class BlenderMaterials:
         rgb_node.outputs["Color"].default_value = diff_color
 
         mix_rgb_node = cls.__node_mix_rgb(nodes, x + -400, y + 0)
-
-        # Blender 4.x renamed MixRGB sockets: Fac→Factor, Color1→A, Color2→B, out Color→Result
-        fac_input = _get_socket(mix_rgb_node.inputs, "Fac", "Factor")
-        if fac_input is not None:
-            fac_input.default_value = 0
-
-        color1_input = _get_socket(mix_rgb_node.inputs, "Color1", "A")
-        mix_out = _get_socket(mix_rgb_node.outputs, "Color", "Result")
+        fac_socket = cls.__socket(mix_rgb_node.inputs, "Factor", "Fac")
+        if fac_socket is not None:
+            fac_socket.default_value = 0
 
         node = cls.__node_color_code_material(nodes, color, x + -200, y + 0)
 
-        # Wire the RGB node → mix → LEGO node group color input
-        if color1_input is not None:
-            links.new(rgb_node.outputs["Color"], color1_input)
+        color1_in = cls.__socket(mix_rgb_node.inputs, "A", "Color1")
+        if color1_in is not None:
+            links.new(rgb_node.outputs["Color"], color1_in)
 
-        # LEGO node group "Color" input — identifier may differ in 4.5-loaded blend files
-        color_input = _get_socket(node.inputs, "Color", "Base Color")
-        if mix_out is not None and color_input is not None:
-            links.new(mix_out, color_input)
+        mix_out = cls.__socket(mix_rgb_node.outputs, "Result", "Color")
+        color_in = cls.__socket(node.inputs, "Color")
+        if mix_out is not None and color_in is not None:
+            links.new(mix_out, color_in)
 
         return node, rgb_node, mix_rgb_node
 
@@ -304,24 +358,21 @@ class BlenderMaterials:
     # TODO: slight variation in strength for each material
     def __create_slope(cls, nodes, links, node, x, y, part_slopes=None):
         slope_texture = cls.__node_slope_texture_by_angle(nodes, x, y, part_slopes)
-        normal_out = _get_socket(slope_texture.outputs, "Normal")
-        normal_in = _get_socket(node.inputs, "Normal")
-        if normal_out and normal_in:
-            links.new(normal_out, normal_in)
+        links.new(slope_texture.outputs["Normal"], node.inputs["Normal"])
 
     @classmethod
     def __node_slope_texture_by_angle(cls, nodes, x, y, angles):
         group_name = "_Slope Texture By Angle"
         node = cls.__node_group(group_name, nodes, x, y)
-        angle_names = ["Angle 1", "Angle 2", "Angle 3", "Angle 4"]
-        for i, angle_name in enumerate(angle_names):
-            if i < len(angles):
-                inp = _get_socket(node.inputs, angle_name)
-                if inp:
-                    inp.default_value = angles[i]
-        strength_in = _get_socket(node.inputs, "Strength")
-        if strength_in:
-            strength_in.default_value = 0.6
+        if len(angles) > 0:
+            node.inputs["Angle 1"].default_value = angles[0]
+        if len(angles) > 1:
+            node.inputs["Angle 2"].default_value = angles[1]
+        if len(angles) > 2:
+            node.inputs["Angle 3"].default_value = angles[2]
+        if len(angles) > 3:
+            node.inputs["Angle 4"].default_value = angles[3]
+        node.inputs["Strength"].default_value = 0.6
         return node
 
     @classmethod
@@ -370,14 +421,8 @@ class BlenderMaterials:
     @classmethod
     def __create_cloth(cls, nodes, links, node, x, y):
         cloth = cls.__node_cloth(nodes, x, y)
-        normal_out = _get_socket(cloth.outputs, "Normal")
-        normal_in = _get_socket(node.inputs, "Normal")
-        if normal_out and normal_in:
-            links.new(normal_out, normal_in)
-        specular_out = _get_socket(cloth.outputs, "Specular")
-        specular_in = _get_socket(node.inputs, "Specular", "Specular IOR Level")
-        if specular_out and specular_in:
-            links.new(specular_out, specular_in)
+        links.new(cloth.outputs["Normal"], node.inputs["Normal"])
+        links.new(cloth.outputs["Specular"], node.inputs["Specular"])
 
     @classmethod
     def __node_cloth(cls, nodes, x, y):
@@ -413,9 +458,7 @@ class BlenderMaterials:
     def __node_lego_emission(cls, nodes, luminance, x, y):
         group_name = "LEGO Emission"
         node = cls.__node_group(group_name, nodes, x, y)
-        lum_in = _get_socket(node.inputs, "Luminance")
-        if lum_in:
-            lum_in.default_value = luminance
+        node.inputs["Luminance"].default_value = luminance
         return node
 
     @classmethod
@@ -440,27 +483,21 @@ class BlenderMaterials:
     def __node_lego_opal(cls, nodes, glitter_color, x, y):
         group_name = "LEGO Opal"
         node = cls.__node_group(group_name, nodes, x, y)
-        glitter_in = _get_socket(node.inputs, "Glitter Color")
-        if glitter_in:
-            glitter_in.default_value = glitter_color
+        node.inputs["Glitter Color"].default_value = glitter_color
         return node
 
     @classmethod
     def __node_lego_glitter(cls, nodes, glitter_color, x, y):
         group_name = "LEGO Glitter"
         node = cls.__node_group(group_name, nodes, x, y)
-        glitter_in = _get_socket(node.inputs, "Glitter Color")
-        if glitter_in:
-            glitter_in.default_value = glitter_color
+        node.inputs["Glitter Color"].default_value = glitter_color
         return node
 
     @classmethod
     def __node_lego_speckle(cls, nodes, speckle_color, x, y):
         group_name = "LEGO Speckle"
         node = cls.__node_group(group_name, nodes, x, y)
-        speckle_in = _get_socket(node.inputs, "Speckle Color")
-        if speckle_in:
-            speckle_in.default_value = speckle_color
+        node.inputs["Speckle Color"].default_value = speckle_color
         return node
 
     @classmethod

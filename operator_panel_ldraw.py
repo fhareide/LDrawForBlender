@@ -85,10 +85,9 @@ class CO_PT_ldraw_eo_panel(bpy.types.Panel):
 
         layout.separator(factor=0.5)
         col = layout.column()
-        col.label(text="Asset Browser")
-        row = col.row()
-        row.scale_y = 1.5
-        row.operator(ldraw_operators.GenerateAllMaterialsOperator.bl_idname, icon='MATERIAL')
+        col.label(text="Asset Library")
+        col.operator(ldraw_operators.GenerateLDrawMaterialsOperator.bl_idname, icon='MATERIAL')
+        col.operator(ldraw_operators.SaveLDrawMaterialLibraryOperator.bl_idname, icon='FILE_BLEND')
 
 
 class CO_PT_ldraw_cu_panel(bpy.types.Panel):
